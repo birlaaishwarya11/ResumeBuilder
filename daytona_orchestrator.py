@@ -58,6 +58,7 @@ class DaytonaOrchestrator:
 
     def cleanup_worker(self, sandbox):
         """Deletes the sandbox immediately."""
+        # Ensure we use delete() as remove() is deprecated/not available in this SDK version
         try:
             print(f"Deleting sandbox {sandbox.id}...")
             self.daytona.delete(sandbox.id)
