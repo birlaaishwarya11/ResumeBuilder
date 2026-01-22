@@ -410,4 +410,5 @@ def download_file(filename):
     return send_from_directory(user_dir, filename)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Listen on all interfaces for Daytona access
+    app.run(debug=True, host='0.0.0.0', port=5000)
