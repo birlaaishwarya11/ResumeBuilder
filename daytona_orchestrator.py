@@ -60,7 +60,7 @@ class DaytonaOrchestrator:
         """Deletes the sandbox immediately."""
         try:
             print(f"Deleting sandbox {sandbox.id}...")
-            self.daytona.remove(sandbox)
+            self.daytona.delete(sandbox.id)
             print(f"Sandbox {sandbox.id} deleted.")
         except Exception as e:
             print(f"Error cleaning up sandbox: {e}")
