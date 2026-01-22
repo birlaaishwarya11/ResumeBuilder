@@ -249,6 +249,14 @@ function viewHistory(filename) {
      } catch(e) {
          console.error('Error loading style:', e);
      }
+     
+     // Check for tab parameter
+     const urlParams = new URLSearchParams(window.location.search);
+     const tab = urlParams.get('tab');
+     if (tab) {
+         switchTab(tab);
+     }
+
      previewResume();
     toggleApiKey();
     checkNewUser();
@@ -395,9 +403,10 @@ async function generatePDF() {
         });
         const data = await res.json();
         if(data.status === 'success') {
-            alert('PDF Generated: ' + data.filename);
-            // Refresh history list (simplified: reload page or fetch list)
-            location.reload(); 
+            alert('Resume generated! Check history to download.');
+            // Refresh and switch to history tab
+            // Use window.location.assign with a timestamp to force reload even if URL is same
+            window.location.assign(window.location.pathname + '?tab=history&t=' + new Date().getTime());
         } else {
             alert('Error: ' + data.message);
         }

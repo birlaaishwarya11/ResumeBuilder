@@ -141,6 +141,11 @@ class DaytonaOrchestrator:
             yaml_str = yaml.dump(resume_data)
             self.upload_file(sandbox, 'resume.yaml', yaml_str)
 
+            # Debug: List files and check CWD
+            print("Debugging sandbox state...")
+            debug_res = sandbox.process.exec("pwd && ls -la && ls -la templates")
+            print(f"Sandbox State:\n{debug_res.result}")
+
             # Run
             cmd = "python generate_resume.py --data resume.yaml"
             print(f"Running command: {cmd}")
@@ -227,24 +232,47 @@ class DaytonaOrchestrator:
                 self.cleanup_worker(sandbox)
 
     def upload_file(self, sandbox, path, content):
-        """Helper to upload file content to sandbox."""
-        # If content is bytes, we need to handle it.
-        # Simplest way for text: echo
-        # For binary/large: specific SDK method or base64.
+        """Helper to upload file content to sandbox using a robust base64-exec pattern."""
+        import base64
         
-        # Check if fs.upload exists
-        # sandbox.fs.upload_file(path, content) # Hypothetical
-        
-        # Fallback: Write using python in sandbox
-        if isinstance(content, bytes):
-            import base64
-            b64 = base64.b64encode(content).decode('utf-8')
-            cmd = f"python -c \"import base64; open('{path}', 'wb').write(base64.b64decode('{b64}'))\""
-            sandbox.process.exec(cmd)
+        # Prepare content and mode
+        if isinstance(content, str):
+            content_bytes = content.encode('utf-8')
+            mode = 'w'
         else:
-            # Escape content for shell or use python to write
-            # Using python is safer for multiline/special chars
-            content_escaped = json.dumps(content) # JSON encode to handle escaping
-            cmd = f"python -c \"open('{path}', 'w').write({content_escaped})\""
-            sandbox.process.exec(cmd)
+            content_bytes = content
+            mode = 'wb'
+
+        b64_content = base64.b64encode(content_bytes).decode('utf-8')
+        
+        # Python script to be executed in the sandbox
+        # We handle directory creation and file writing
+        remote_script = f"""
+import base64
+import os
+
+path = '{path}'
+dir_name = os.path.dirname(path)
+if dir_name:
+    os.makedirs(dir_name, exist_ok=True)
+
+content = base64.b64decode('{b64_content}')
+mode = '{mode}'
+
+with open(path, mode) as f:
+    if mode == 'w':
+        f.write(content.decode('utf-8'))
+    else:
+        f.write(content)
+"""
+        # Encode the script itself to avoid shell escaping issues
+        remote_script_b64 = base64.b64encode(remote_script.encode('utf-8')).decode('utf-8')
+        
+        # Execute the script
+        cmd = f"python -c \"import base64; exec(base64.b64decode('{remote_script_b64}').decode('utf-8'))\""
+        
+        print(f"Uploading {path}...")
+        res = sandbox.process.exec(cmd)
+        if res.exit_code != 0:
+            raise Exception(f"Failed to upload {path}: {res.result}")
 

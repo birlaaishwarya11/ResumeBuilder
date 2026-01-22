@@ -11,3 +11,4 @@ scikit-learn
 nltk
 mcp
 daytona-sdk
+gunicorn
