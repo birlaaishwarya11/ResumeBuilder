@@ -16,7 +16,7 @@ class DaytonaOrchestrator:
         self.api_key = os.environ.get("DAYTONA_API_KEY")
         self.daytona = None
         # Default to the user's repo for consistency
-        self.target_repo = os.environ.get("DAYTONA_TARGET_REPO", "https://github.com/aishwaryabirla/ResumeBuilder")
+        self.target_repo = os.environ.get("DAYTONA_TARGET_REPO", "https://github.com/birlaaishwarya11/ResumeBuilder.git")
         
         if self.api_key:
             try:
