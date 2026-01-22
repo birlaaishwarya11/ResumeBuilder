@@ -50,7 +50,7 @@ class DaytonaOrchestrator:
             # Let's install the client.
             deps += " ollama"
             
-            res = sandbox.process.code_run(f"pip install {deps}")
+            res = sandbox.process.exec(f"pip install {deps}")
             if res.exit_code != 0:
                 print(f"Warning: Dependency installation might have failed: {res.result}")
             
@@ -100,7 +100,7 @@ class DaytonaOrchestrator:
             # Run
             cmd = f"python worker_extractor.py '{filename}'"
             print(f"Running command in sandbox: {cmd}")
-            response = sandbox.process.code_run(cmd)
+            response = sandbox.process.exec(cmd)
             
             print(f"Worker Output:\n{response.result}")
             
@@ -133,7 +133,7 @@ class DaytonaOrchestrator:
             print("Uploading scripts and templates...")
             self.upload_file(sandbox, 'generate_resume.py', open('generate_resume.py').read())
             
-            sandbox.process.code_run("mkdir -p templates")
+            sandbox.process.exec("mkdir -p templates")
             self.upload_file(sandbox, 'templates/resume.html', open('templates/resume.html').read())
             
             # Upload Data
@@ -144,21 +144,21 @@ class DaytonaOrchestrator:
             # Run
             cmd = "python generate_resume.py --data resume.yaml"
             print(f"Running command: {cmd}")
-            response = sandbox.process.code_run(cmd)
+            response = sandbox.process.exec(cmd)
             print(f"Worker Output:\n{response.result}")
             
             if response.exit_code != 0:
                 raise Exception(f"Generation failed: {response.result}")
             
             # Find the PDF file
-            ls_res = sandbox.process.code_run("ls *.pdf")
+            ls_res = sandbox.process.exec("ls *.pdf")
             pdf_filename = ls_res.result.strip().split('\n')[0]
             if not pdf_filename:
                  raise Exception("No PDF file found in worker output")
             
             # Download
             print(f"Downloading {pdf_filename}...")
-            cat_res = sandbox.process.code_run(f"base64 {pdf_filename}")
+            cat_res = sandbox.process.exec(f"base64 {pdf_filename}")
             if cat_res.exit_code != 0:
                 raise Exception("Failed to read PDF file")
             
@@ -201,9 +201,9 @@ class DaytonaOrchestrator:
             # We can try to install it.
             print("Checking/Installing Ollama in worker...")
             # This might be slow.
-            sandbox.process.code_run("curl -fsSL https://ollama.com/install.sh | sh")
+            sandbox.process.exec("curl -fsSL https://ollama.com/install.sh | sh")
             # Start ollama in background?
-            # sandbox.process.code_run("ollama serve &")
+            # sandbox.process.exec("ollama serve &")
             # This is complex in a transient sandbox. 
             # For now, let's assume we use the python logic first.
             
@@ -211,7 +211,7 @@ class DaytonaOrchestrator:
             # If user wants ollama, we need a persistent worker or pre-built image.
             
             print(f"Running command: {cmd}")
-            response = sandbox.process.code_run(cmd)
+            response = sandbox.process.exec(cmd)
             print(f"Worker Output:\n{response.result}")
             
             if response.exit_code != 0:
@@ -240,11 +240,11 @@ class DaytonaOrchestrator:
             import base64
             b64 = base64.b64encode(content).decode('utf-8')
             cmd = f"python -c \"import base64; open('{path}', 'wb').write(base64.b64decode('{b64}'))\""
-            sandbox.process.code_run(cmd)
+            sandbox.process.exec(cmd)
         else:
             # Escape content for shell or use python to write
             # Using python is safer for multiline/special chars
             content_escaped = json.dumps(content) # JSON encode to handle escaping
             cmd = f"python -c \"open('{path}', 'w').write({content_escaped})\""
-            sandbox.process.code_run(cmd)
+            sandbox.process.exec(cmd)
 
