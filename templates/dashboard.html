@@ -1,0 +1,462 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex h-[calc(100vh-100px)] gap-4">
+    <!-- Left Column: Controls & Editor -->
+    <div class="w-1/2 flex flex-col gap-4 overflow-hidden">
+        
+        <!-- Toolbar -->
+        <div class="bg-white p-2 rounded shadow flex justify-between items-center">
+            <div class="flex gap-2">
+                <button onclick="switchTab('editor')" class="px-3 py-1 rounded bg-blue-100 text-blue-700 font-bold text-sm">Editor</button>
+                <button onclick="switchTab('style')" class="px-3 py-1 rounded hover:bg-gray-100 text-sm">Style</button>
+                <button onclick="switchTab('ats')" class="px-3 py-1 rounded hover:bg-gray-100 text-sm">ATS Check</button>
+                <button onclick="switchTab('history')" class="px-3 py-1 rounded hover:bg-gray-100 text-sm">History</button>
+            </div>
+            <div class="flex gap-2">
+                <input type="file" id="resumeUpload" class="hidden" accept=".pdf,.docx" onchange="uploadResume()">
+                <button onclick="document.getElementById('resumeUpload').click()" class="bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700 text-sm">
+                    <i class="fas fa-file-upload mr-1"></i> Import
+                </button>
+                <button onclick="saveResume()" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm">
+                    <i class="fas fa-save mr-1"></i> Save
+                </button>
+                <button onclick="previewResume()" class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 text-sm">
+                    <i class="fas fa-sync mr-1"></i> Refresh Preview
+                </button>
+            </div>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="flex-grow bg-white rounded shadow overflow-hidden relative">
+            
+            <!-- Editor Tab -->
+            <div id="tab-editor" class="h-full flex flex-col p-4">
+                <textarea id="resumeEditor" class="flex-grow w-full p-4 border rounded font-mono text-base bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-blue-300" spellcheck="false">{{ resume_text }}</textarea>
+            </div>
+
+            <!-- Style Tab -->
+            <div id="tab-style" class="h-full hidden p-6 overflow-y-auto">
+                <h3 class="font-bold text-lg mb-4">Customize Formatting</h3>
+                
+                <!-- ATS Style Guide -->
+                <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-info-circle text-blue-500"></i>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-blue-800">Industry Standard Styling</h3>
+                            <div class="mt-2 text-sm text-blue-700">
+                                <ul class="list-disc pl-5 space-y-1">
+                                    <li><strong>Fonts:</strong> Serif (Times New Roman) or Sans-Serif (Arial) are safest for ATS parsing.</li>
+                                    <li><strong>Size:</strong> Keep body text between 9.5pt and 11pt.</li>
+                                    <li><strong>Margins:</strong> Standard (0.5in - 1in) ensures content isn't cut off during printing.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-1">Font Family</label>
+                        <select id="styleFont" class="w-full border rounded p-2" onchange="previewResume()">
+                            <option value='"Times New Roman", Times, serif'>Times New Roman (Classic)</option>
+                            <option value='Arial, sans-serif'>Arial (Modern)</option>
+                            <option value='Georgia, serif'>Georgia (Elegant)</option>
+                            <option value='"Helvetica Neue", Helvetica, sans-serif'>Helvetica (Clean)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold mb-1">Font Size</label>
+                        <select id="styleSize" class="w-full border rounded p-2" onchange="previewResume()">
+                            <option value="9pt">Small (9pt)</option>
+                            <option value="9.5pt" selected>Medium (9.5pt)</option>
+                            <option value="10.5pt">Large (10.5pt)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold mb-1">Accent Color</label>
+                        <div class="flex gap-2">
+                            <input type="color" id="styleColor" value="#000000" class="h-10 w-20" onchange="previewResume()">
+                            <span class="text-xs text-gray-500 self-center">Headers & Links</span>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-bold mb-1">Margins</label>
+                        <select id="styleMargin" class="w-full border rounded p-2" onchange="previewResume()">
+                            <option value="0.3in" selected>Compact (0.3in)</option>
+                            <option value="0.5in">Standard (0.5in)</option>
+                            <option value="0.75in">Spacious (0.75in)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ATS Tab -->
+            <div id="tab-ats" class="h-full hidden p-6 overflow-y-auto">
+                <h3 class="font-bold text-lg mb-4">ATS Optimization</h3>
+                <textarea id="jdInput" placeholder="Paste Job Description here..." class="w-full h-40 p-2 border rounded mb-4 text-sm">{{ stashed_jd }}</textarea>
+                
+                <div class="flex flex-col gap-2 mb-4">
+                     <div class="flex gap-2">
+                         <select id="modelSelect" class="border rounded p-2 text-sm flex-grow" onchange="toggleApiKey()">
+                             <option value="ollama/llama3">Local: Llama 3</option>
+                             <option value="ollama/mistral">Local: Mistral</option>
+                             <option value="gemini/gemini-pro">Cloud: Gemini Pro</option>
+                             <option value="gpt-3.5-turbo">Cloud: GPT-3.5</option>
+                         </select>
+                     </div>
+                     <div id="apiKeyContainer" class="hidden">
+                         <input type="password" id="apiKeyInput" placeholder="Enter API Key (not stored)" class="w-full border rounded p-2 text-sm bg-yellow-50">
+                     </div>
+                     <button onclick="analyzeATS()" class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 text-sm w-full">
+                         <i class="fas fa-magic mr-1"></i> Analyze
+                     </button>
+                </div>
+                <div id="analysisResult" class="hidden p-4 bg-gray-50 rounded border text-sm"></div>
+            </div>
+
+            <!-- History Tab -->
+            <div id="tab-history" class="h-full hidden p-6 overflow-y-auto">
+                <h3 class="font-bold text-lg mb-4">Generation History</h3>
+                <div id="pdfList" class="space-y-2">
+                    {% for pdf in pdfs %}
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded border hover:bg-gray-100">
+                        <span class="text-sm truncate w-1/3" title="{{ pdf }}">{{ pdf }}</span>
+                        <div class="flex gap-2">
+                            <button onclick="viewHistory('{{ pdf }}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold border border-blue-600 px-2 py-1 rounded">
+                                <i class="fas fa-eye mr-1"></i> View
+                            </button>
+                            <button onclick="restoreVersion('{{ pdf }}')" class="text-yellow-600 hover:text-yellow-800 text-xs font-bold border border-yellow-600 px-2 py-1 rounded" title="Restore this version to editor">
+                                <i class="fas fa-undo mr-1"></i> Edit
+                            </button>
+                            <a href="/download/{{ pdf }}" target="_blank" class="text-gray-600 hover:text-gray-800 text-xs border border-gray-400 px-2 py-1 rounded">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <button onclick="deletePDF('{{ pdf }}')" class="text-red-600 hover:text-red-800 text-xs border border-red-400 px-2 py-1 rounded">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Live Preview -->
+    <div class="w-1/2 bg-gray-200 rounded shadow flex flex-col overflow-hidden">
+        <div class="bg-gray-800 text-white p-2 text-sm flex justify-between items-center">
+            <span class="font-bold"><i class="fas fa-file-pdf mr-2"></i>Live Preview</span>
+            <div class="flex gap-2 items-center">
+                <div class="relative group">
+                    <input type="text" id="keywordsInput" placeholder="Target Role (e.g. Google_PM)" class="text-black text-xs p-1 rounded w-48 border focus:ring-2 focus:ring-blue-500">
+                    <div class="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded p-2 top-8 right-0 w-48 z-50 shadow-lg">
+                        Add keywords like Company or Role to tag this version (e.g., "Google_PM" becomes "Resume_Google_PM.pdf")
+                    </div>
+                </div>
+                <button onclick="generatePDF()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold shadow-sm">
+                    Generate PDF
+                </button>
+            </div>
+        </div>
+        <div class="flex-grow relative">
+            <iframe id="previewFrame" class="w-full h-full border-0 bg-white"></iframe>
+            <!-- Loading Overlay -->
+            <div id="previewLoading" class="hidden absolute inset-0 bg-white bg-opacity-80 flex items-center justify-center">
+                <div class="text-blue-600 font-bold"><i class="fas fa-spinner fa-spin mr-2"></i>Updating Preview...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data container -->
+<div id="dashboard-data" data-style='{{ saved_style | tojson | safe }}' class="hidden"></div>
+
+<script>
+// Tab Switching
+function switchTab(tabName) {
+    ['editor', 'style', 'ats', 'history'].forEach(t => {
+        document.getElementById('tab-' + t).classList.add('hidden');
+    });
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    
+    // Update button styles (simple toggle for now)
+    document.querySelectorAll('button[onclick^="switchTab"]').forEach(btn => {
+        if(btn.getAttribute('onclick').includes(tabName)) {
+            btn.classList.add('bg-blue-100', 'text-blue-700', 'font-bold');
+        } else {
+            btn.classList.remove('bg-blue-100', 'text-blue-700', 'font-bold');
+        }
+    });
+}
+
+// Get current style options
+function getStyleOptions() {
+    return {
+        font_family: document.getElementById('styleFont').value,
+        font_size: document.getElementById('styleSize').value,
+        accent_color: document.getElementById('styleColor').value,
+        margin: document.getElementById('styleMargin').value
+    };
+}
+
+async function previewResume() {
+    const text = document.getElementById('resumeEditor').value;
+    const style = getStyleOptions();
+    
+    document.getElementById('previewLoading').classList.remove('hidden');
+    
+    try {
+        const res = await fetch('/api/preview_html', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text, style})
+        });
+        const data = await res.json();
+        
+        if(data.status === 'success') {
+            const frame = document.getElementById('previewFrame');
+            frame.srcdoc = data.html;
+        }
+    } catch(e) {
+        console.error(e);
+    }
+    
+    document.getElementById('previewLoading').classList.add('hidden');
+}
+
+function viewHistory(filename) {
+    const frame = document.getElementById('previewFrame');
+    // Clear srcdoc if any
+    frame.removeAttribute('srcdoc');
+    frame.src = '/download/' + filename;
+}
+
+// Auto-preview on load
+ window.onload = function() {
+     try {
+         const dataDiv = document.getElementById('dashboard-data');
+         if (dataDiv && dataDiv.dataset.style) {
+             const savedStyle = JSON.parse(dataDiv.dataset.style);
+             setStyleOptions(savedStyle);
+         }
+     } catch(e) {
+         console.error('Error loading style:', e);
+     }
+     previewResume();
+    toggleApiKey();
+    checkNewUser();
+};
+
+function checkNewUser() {
+    const editor = document.getElementById('resumeEditor');
+    if (!editor.value.trim() || editor.value.includes("# Error loading resume")) {
+        // Show onboarding modal or prompt
+        if(confirm("Welcome! Would you like to upload your existing resume to get started?")) {
+            document.getElementById('resumeUpload').click();
+        }
+    }
+}
+
+async function uploadResume() {
+    const input = document.getElementById('resumeUpload');
+    if (!input.files.length) return;
+    
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Show loading state
+    const originalText = document.querySelector('button[onclick="document.getElementById(\'resumeUpload\').click()"]').innerHTML;
+    document.querySelector('button[onclick="document.getElementById(\'resumeUpload\').click()"]').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    
+    try {
+        const res = await fetch('/api/upload_resume', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('resumeEditor').value = data.text;
+            previewResume();
+            alert('Resume imported successfully!');
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Upload failed');
+    }
+    
+    // Restore button
+    document.querySelector('button[onclick="document.getElementById(\'resumeUpload\').click()"]').innerHTML = originalText;
+    input.value = ''; // Reset
+}
+
+// ... Include existing functions (saveResume, analyzeATS, generatePDF, toggleApiKey) ...
+async function saveResume() {
+    const text = document.getElementById('resumeEditor').value;
+    const style = getStyleOptions();
+    const btn = document.querySelector('button[onclick="saveResume()"]');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    
+    try {
+        const res = await fetch('/api/update_resume', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text, style})
+        });
+        const data = await res.json();
+        if(data.status === 'success') {
+            // Optional: Show toast
+        } else {
+            alert('Error: ' + data.message);
+        }
+    } catch(e) {
+        alert('Network error');
+    }
+    btn.innerHTML = originalText;
+}
+
+function setStyleOptions(style) {
+    if(!style) return;
+    if(style.font_family) document.getElementById('styleFont').value = style.font_family;
+    if(style.font_size) document.getElementById('styleSize').value = style.font_size;
+    if(style.accent_color) document.getElementById('styleColor').value = style.accent_color;
+    if(style.margin) document.getElementById('styleMargin').value = style.margin;
+}
+
+async function restoreVersion(filename) {
+    if(!confirm('Restore this version? Unsaved changes will be lost.')) return;
+    
+    try {
+        const res = await fetch('/api/restore_version', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename})
+        });
+        const data = await res.json();
+        if(data.status === 'success') {
+            document.getElementById('resumeEditor').value = data.text;
+            setStyleOptions(data.style);
+            switchTab('editor');
+            previewResume();
+            alert('Restored successfully');
+        } else {
+            alert('Error: ' + data.message);
+        }
+    } catch(e) {
+        alert('Network error');
+    }
+}
+
+async function deletePDF(filename) {
+    if(!confirm('Delete this PDF?')) return;
+    
+    try {
+        const res = await fetch('/api/delete_pdf', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename})
+        });
+        const data = await res.json();
+        if(data.status === 'success') {
+            location.reload();
+        } else {
+            alert('Error: ' + data.message);
+        }
+    } catch(e) {
+        alert('Network error');
+    }
+}
+
+async function generatePDF() {
+    const keywords = document.getElementById('keywordsInput').value;
+    // Note: We currently don't pass style to generate_pdf python script in the backend
+    // For now, this just generates based on saved YAML. 
+    // Ideally, we should save styles too.
+    
+    const btn = document.querySelector('button[onclick="generatePDF()"]');
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    
+    try {
+        const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({keywords})
+        });
+        const data = await res.json();
+        if(data.status === 'success') {
+            alert('PDF Generated: ' + data.filename);
+            // Refresh history list (simplified: reload page or fetch list)
+            location.reload(); 
+        } else {
+            alert('Error: ' + data.message);
+        }
+    } catch(e) {
+        alert('Network error');
+    }
+    btn.innerHTML = 'Generate PDF';
+}
+
+async function analyzeATS() {
+    const jd_text = document.getElementById('jdInput').value;
+    const model = document.getElementById('modelSelect').value;
+    const api_key = document.getElementById('apiKeyInput').value;
+    const resultDiv = document.getElementById('analysisResult');
+    
+    if(!jd_text) return alert("Please enter Job Description");
+    
+    resultDiv.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+    resultDiv.classList.remove('hidden');
+    
+    try {
+        const res = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({jd_text, model, api_key})
+        });
+        const data = await res.json();
+        
+        let html = '';
+        if(data.score) html += `<div class="font-bold text-lg mb-2">Score: ${data.score}/100</div>`;
+        if(data.summary) html += `<p class="mb-2 italic">${data.summary}</p>`;
+        
+        if(data.missing_keywords && data.missing_keywords.length > 0) {
+            html += `<div class="font-bold text-red-600 mt-2">Missing Keywords:</div><ul class="list-disc pl-5">`;
+            data.missing_keywords.forEach(k => html += `<li>${k}</li>`);
+            html += `</ul>`;
+        }
+        
+        if(data.suggestions && data.suggestions.length > 0) {
+            html += `<div class="font-bold text-blue-600 mt-2">Suggestions:</div><ul class="list-disc pl-5">`;
+            data.suggestions.forEach(s => html += `<li>${s}</li>`);
+            html += `</ul>`;
+        }
+
+        resultDiv.innerHTML = html;
+        
+    } catch(e) {
+        resultDiv.innerHTML = 'Error analyzing.';
+    }
+}
+
+function toggleApiKey() {
+    const model = document.getElementById('modelSelect').value;
+    const container = document.getElementById('apiKeyContainer');
+    if (model.startsWith('ollama/')) {
+        container.classList.add('hidden');
+    } else {
+        container.classList.remove('hidden');
+    }
+}
+</script>
+{% endblock %}

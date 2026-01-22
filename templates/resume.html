@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ resume.name }} - Resume</title>
+    <style>
+        @page {
+            size: Letter;
+            margin: {{ style.margin | default('0.3in') }};
+        }
+        body {
+            font-family: {{ style.font_family | default('"Times New Roman", Times, serif') }};
+            font-size: {{ style.font_size | default('9.5pt') }};
+            line-height: {{ style.line_height | default('1.2') }};
+            color: #000;
+            margin: 0;
+            padding: 0;
+        }
+        a {
+            color: #000;
+            text-decoration: none;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 5px;
+        }
+        .name {
+            font-size: 1.6em;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: {{ style.accent_color | default('#000000') }};
+        }
+        .contact-info {
+            margin-top: 2px;
+        }
+        .section-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 1px solid {{ style.accent_color | default('#000000') }};
+            color: {{ style.accent_color | default('#000000') }};
+            margin-top: 8px;
+            margin-bottom: 3px;
+            padding-bottom: 1px;
+        }
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+        }
+        .item-sub {
+            display: flex;
+            justify-content: space-between;
+            font-style: italic; /* Or bold depending on resume */
+        }
+        /* Specific adjustments based on image */
+        .school-name { font-weight: bold; }
+        .degree { font-weight: bold; }
+        
+        .company-name { font-weight: bold; }
+        .role { font-weight: bold; } /* In image, it looks like "Company, Role" line is bold */
+        
+        .project-name { 
+            font-weight: bold; 
+            color: {{ style.accent_color | default('#800000') }}; 
+        }
+        .project-header { display: flex; justify-content: space-between; }
+        
+        ul {
+            margin: 1px 0 3px 15px; /* Tighter lists */
+            padding: 0;
+            list-style-type: disc;
+        }
+        li {
+            margin-bottom: 0px; /* No extra space between bullets */
+        }
+        
+        .skills-category {
+            font-weight: bold;
+        }
+        
+        /* Flexbox replacement for PDF generation if needed, but weasyprint supports flex well enough usually. 
+           If not, we use floats or tables. Let's try flex first. */
+        .row {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .left {
+            text-align: left;
+        }
+        .right {
+            text-align: right;
+        }
+        
+        /* Helper for technical skills layout */
+        .skill-row {
+            margin-bottom: 2px;
+        }
+
+        /* Resume Content Wrapper */
+        .content {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="name">{{ resume.name }}</div>
+        <div class="contact-info">
+            {{ resume.contact.location }} | {{ resume.contact.phone }} | <a href="mailto:{{ resume.contact.email }}">{{ resume.contact.email }}</a> | <a href="{{ resume.contact.portfolio_url }}">{{ resume.contact.portfolio_label }}</a><br>
+            <a href="{{ resume.contact.linkedin }}">{{ resume.contact.linkedin }}</a>
+        </div>
+    </div>
+
+    <!-- EDUCATION -->
+    <div class="section-title">EDUCATION</div>
+    {% for edu in resume.education %}
+    <div class="education-item">
+        <div class="row">
+            <div class="left school-name">{{ edu.institution }}</div>
+            <div class="right">{{ edu.location }}</div>
+        </div>
+        <div class="row">
+            <div class="left"><strong>{{ edu.degree }}</strong>, GPA: {{ edu.gpa }}</div>
+            <div class="right">{{ edu.date }}</div>
+        </div>
+        {% if edu.coursework %}
+        <div class="coursework">
+            Relevant Coursework: {{ edu.coursework }}
+        </div>
+        {% endif %}
+    </div>
+    {% if not loop.last %}<div style="margin-bottom: 5px;"></div>{% endif %}
+    {% endfor %}
+
+    <!-- TECHNICAL SKILLS -->
+    <div class="section-title">TECHNICAL SKILLS</div>
+    {% for skill in resume.technical_skills %}
+    <div class="skill-row">
+        <span class="skills-category">{{ skill.category }}:</span> {{ skill.skills }}
+    </div>
+    {% endfor %}
+
+    <!-- PROFESSIONAL EXPERIENCE -->
+    <div class="section-title">PROFESSIONAL EXPERIENCE</div>
+    {% for exp in resume.experience %}
+    <div class="experience-item">
+        <div class="row">
+            <div class="left"><strong>{{ exp.company }}</strong>, <strong>{{ exp.role }}</strong>, {{ exp.location }}</div>
+            <div class="right">{{ exp.date }}</div>
+        </div>
+        <ul>
+            {% for bullet in exp.bullets %}
+            <li>{{ bullet }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+
+    <!-- PROJECTS AND HACKATHON HIGHLIGHTS -->
+    <div class="section-title">PROJECTS AND HACKATHON HIGHLIGHTS</div>
+    {% for proj in resume.projects %}
+    <div class="project-item">
+        <div class="row">
+            <div class="left">
+                <span class="project-name">{{ proj.name }}</span>
+                {% if proj.subtitle %} | <strong>{{ proj.subtitle }}</strong>{% endif %}
+                {% if proj.event %} | <strong>{{ proj.event }}</strong>{% endif %}
+                {% if proj.award %} | <strong>{{ proj.award }}</strong>{% endif %}
+            </div>
+            <div class="right"><em>{{ proj.date }}</em></div>
+        </div>
+        <ul>
+            {% for bullet in proj.bullets %}
+            <li>{{ bullet }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endfor %}
+
+    <!-- EXTRACURRICULAR ACTIVITIES / VOLUNTEER & RESEARCH PAPERS -->
+    <div class="section-title">EXTRACURRICULAR ACTIVITIES /VOLUNTEER & RESEARCH PAPERS</div>
+    <ul>
+        {% for bullet in resume.extracurricular.bullets %}
+        <li>{{ bullet }}</li>
+        {% endfor %}
+        {% if resume.extracurricular.research_papers %}
+        <li>Research papers:
+            <ul style="list-style-type: circle; margin-left: 20px;">
+                {% for paper in resume.extracurricular.research_papers %}
+                <li>{{ paper.title }} <em>{{ paper.date }}</em></li>
+                {% endfor %}
+            </ul>
+        </li>
+        {% endif %}
+    </ul>
+
+</body>
+</html>

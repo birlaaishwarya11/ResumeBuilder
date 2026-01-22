@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "ResumeBuilder Assistant",
+  "version": "1.0",
+  "description": "Capture Job Descriptions and send to Resume Builder",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["http://localhost:5000/*"],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
