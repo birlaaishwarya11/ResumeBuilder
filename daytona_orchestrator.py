@@ -1,10 +1,10 @@
 import os
 import json
 import time
-from daytona_sdk import Daytona, DaytonaConfig
+from daytona_sdk import Daytona, DaytonaConfig, CreateSandboxBaseParams
 
 # Configuration
-REPO_URL = "https://github.com/daytonaio/sample-python-flask" # Placeholder, ideally use current repo if public or accessible
+# REPO_URL = "https://github.com/daytonaio/sample-python-flask" # Placeholder, ideally use current repo if public or accessible
 # Since we are in a Daytona sandbox, we might want to clone the *current* code or use a standard image and upload scripts.
 # For simplicity, we will assume we can clone this repo. If it's a private repo/local, we might need to upload files manually.
 # User said "The main application... must run inside a persistent Daytona Sandbox".
@@ -32,9 +32,12 @@ class DaytonaOrchestrator:
         if not self.daytona:
             raise Exception("Daytona SDK not initialized. Please set DAYTONA_API_KEY environment variable.")
         
-        print(f"Creating worker sandbox from {self.target_repo}...")
+        print(f"Creating worker sandbox...")
         try:
-            sandbox = self.daytona.create(self.target_repo)
+            # Create a standard python environment instead of cloning a repo
+            # This is faster and we upload scripts anyway
+            params = CreateSandboxBaseParams(language="python", ephemeral=True)
+            sandbox = self.daytona.create(params)
             print(f"Sandbox {sandbox.id} created.")
             
             # Setup dependencies
