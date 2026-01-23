@@ -32,10 +32,16 @@ class TestUploadEndpoint(unittest.TestCase):
         self.orch_patcher = patch('app.orchestrator')
         self.mock_orch = self.orch_patcher.start()
 
+        # Mock KnowledgeBase to simulate Ollama failure
+        self.kb_patcher = patch('app.kb')
+        self.mock_kb = self.kb_patcher.start()
+        self.mock_kb.add_text.side_effect = Exception("Failed to connect to Ollama")
+
     def tearDown(self):
         self.user_patcher.stop()
         self.manager_patcher.stop()
         self.orch_patcher.stop()
+        self.kb_patcher.stop()
 
     @patch('app.extract_resume_content')
     def test_upload_fallback_when_daytona_fails(self, mock_local_extract):

@@ -179,7 +179,11 @@ def upload_resume():
             parsed_data = parse_text(extracted_text)
             
             # Add to Knowledge Base (Graph Extraction)
-            kb.add_text(extracted_text, source=f"Resume: {filename}")
+            try:
+                kb.add_text(extracted_text, source=f"Resume: {filename}")
+            except Exception as e:
+                # Log warning but don't fail the upload
+                print(f"Warning: Failed to add to Knowledge Base (Ollama might be down): {e}")
             
             resume_path = os.path.join(user_dir, "resume.yaml")
             with open(resume_path, 'w') as f:
