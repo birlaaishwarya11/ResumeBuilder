@@ -31,8 +31,8 @@ RUN mkdir -p /app/users /app/chroma_db
 EXPOSE 5001
 
 # Environment variables (Defaults, can be overridden)
-ENV PORT=5001
+ENV PORT=8000
 ENV FLASK_APP=app.py
 
 # Command to run the application using Gunicorn
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --access-logfile - app:app

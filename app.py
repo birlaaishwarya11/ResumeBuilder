@@ -603,6 +603,6 @@ def download_file(filename):
 
 if __name__ == '__main__':
     # Listen on all interfaces for Daytona access
-    # Port 5000 is often taken by AirPlay on macOS, so we default to 5001
-    port = int(os.environ.get("PORT", 5001))
+    # Port 5000 is often taken by AirPlay on macOS, so we default to 8000
+    port = int(os.environ.get("PORT", 8000))
     app.run(debug=True, host='0.0.0.0', port=port)
