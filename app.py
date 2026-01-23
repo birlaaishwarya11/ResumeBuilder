@@ -136,34 +136,50 @@ def save_jd():
 @app.route('/api/upload_resume', methods=['POST'])
 @login_required
 def upload_resume():
-    if not orchestrator.daytona:
-         return jsonify({"error": "Daytona SDK not connected. Check server logs."}), 503
+    # Daytona check removed to allow local fallback
+    # if not orchestrator.daytona:
+    #      return jsonify({"error": "Daytona SDK not connected. Check server logs."}), 503
 
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     file = request.files['file']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
-        
+    
     if file and (file.filename.endswith('.pdf') or file.filename.endswith('.docx')):
         user = get_current_user()
         user_dir = user_manager.get_user_dir(user)
-        # filename = secure_filename(file.filename)
-        # save_path = os.path.join(user_dir, filename)
-        # file.save(save_path) # Don't save locally for privacy/worker pattern
+        filename = secure_filename(file.filename)
+        save_path = os.path.join(user_dir, filename)
         
-        # Read file content
-        file_content = file.read()
+        # Save locally first (needed for local fallback)
+        file.save(save_path)
         
         try:
-            # Extract content via Worker Sandbox
-            extracted_text = orchestrator.parse_resume(file.filename, file_content)
+            extracted_text = ""
             
+            # Try Daytona if connected
+            if orchestrator.daytona:
+                try:
+                    with open(save_path, 'rb') as f:
+                        file_content = f.read()
+                    extracted_text = orchestrator.parse_resume(filename, file_content)
+                except Exception as e:
+                    print(f"Daytona parsing failed, falling back to local: {e}")
+                    # Fallback to local
+                    extracted_text = extract_resume_content(save_path)
+            else:
+                # Local Extraction
+                extracted_text = extract_resume_content(save_path)
+        
+            if not extracted_text or extracted_text.startswith("# Error"):
+                 raise Exception(extracted_text or "Extraction returned empty")
+
             # Update resume.yaml
             parsed_data = parse_text(extracted_text)
             
             # Add to Knowledge Base (Graph Extraction)
-            kb.add_text(extracted_text, source=f"Resume: {file.filename}")
+            kb.add_text(extracted_text, source=f"Resume: {filename}")
             
             resume_path = os.path.join(user_dir, "resume.yaml")
             with open(resume_path, 'w') as f:
@@ -171,7 +187,7 @@ def upload_resume():
             return jsonify({"status": "success", "text": extracted_text})
         except Exception as e:
             return jsonify({"error": f"Failed to parse resume: {str(e)}"}), 500
-            
+        
     return jsonify({"error": "Invalid file type"}), 400
 
 @app.route('/dashboard')
