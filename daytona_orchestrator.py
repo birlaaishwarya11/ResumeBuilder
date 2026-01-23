@@ -240,47 +240,67 @@ class DaytonaOrchestrator:
                 self.cleanup_worker(sandbox)
 
     def upload_file(self, sandbox, path, content):
-        """Helper to upload file content to sandbox using a robust base64-exec pattern."""
+        """Helper to upload file content to sandbox using a robust chunked base64-exec pattern."""
         import base64
         
-        # Prepare content and mode
+        # Prepare content
         if isinstance(content, str):
             content_bytes = content.encode('utf-8')
-            mode = 'w'
         else:
             content_bytes = content
-            mode = 'wb'
 
         b64_content = base64.b64encode(content_bytes).decode('utf-8')
         
-        # Python script to be executed in the sandbox
-        # We handle directory creation and file writing
-        remote_script = f"""
-import base64
-import os
-
-path = '{path}'
-dir_name = os.path.dirname(path)
-if dir_name:
-    os.makedirs(dir_name, exist_ok=True)
-
-content = base64.b64decode('{b64_content}')
-mode = '{mode}'
-
-with open(path, mode) as f:
-    if mode == 'w':
-        f.write(content.decode('utf-8'))
-    else:
-        f.write(content)
+        # Ensure directory exists
+        dir_name = os.path.dirname(path)
+        if dir_name:
+            # We can use a simple python one-liner for mkdir
+            sandbox.process.exec(f"python -c \"import os; os.makedirs('{dir_name}', exist_ok=True)\"")
+        
+        # Upload in chunks to avoid command length limits
+        CHUNK_SIZE = 10000 # 10KB chunks
+        total_len = len(b64_content)
+        
+        # Create/Clear the temporary b64 file
+        temp_b64_path = path + ".b64"
+        sandbox.process.exec(f"rm -f {temp_b64_path}")
+        
+        for i in range(0, total_len, CHUNK_SIZE):
+            chunk = b64_content[i:i+CHUNK_SIZE]
+            # Use printf to append chunk to temp file
+            # We must be careful with shell escaping, but base64 is safe-ish.
+            # However, simpler to use python to append to avoid shell limits/issues entirely.
+            
+            # Python script to append chunk
+            # We pass chunk inside the script. 10KB is safe for exec.
+            append_script = f"""
+with open('{temp_b64_path}', 'a') as f:
+    f.write('{chunk}')
 """
-        # Encode the script itself to avoid shell escaping issues
-        remote_script_b64 = base64.b64encode(remote_script.encode('utf-8')).decode('utf-8')
+            # Encode script to avoid special char issues in shell
+            script_b64 = base64.b64encode(append_script.encode('utf-8')).decode('utf-8')
+            cmd = f"python -c \"import base64; exec(base64.b64decode('{script_b64}').decode('utf-8'))\""
+            
+            res = sandbox.process.exec(cmd)
+            if res.exit_code != 0:
+                raise Exception(f"Failed to upload chunk {i} of {path}: {res.result}")
         
-        # Execute the script
-        cmd = f"python -c \"import base64; exec(base64.b64decode('{remote_script_b64}').decode('utf-8'))\""
+        # Decode base64 file to target file
+        decode_script = f"""
+import base64
+with open('{temp_b64_path}', 'r') as f_in, open('{path}', 'wb') as f_out:
+    b64_data = f_in.read()
+    f_out.write(base64.b64decode(b64_data))
+"""
+        decode_script_b64 = base64.b64encode(decode_script.encode('utf-8')).decode('utf-8')
+        cmd = f"python -c \"import base64; exec(base64.b64decode('{decode_script_b64}').decode('utf-8'))\""
         
-        print(f"Uploading {path}...")
         res = sandbox.process.exec(cmd)
         if res.exit_code != 0:
-            raise Exception(f"Failed to upload {path}: {res.result}")
+            raise Exception(f"Failed to decode {path}: {res.result}")
+            
+        # Cleanup temp file
+        sandbox.process.exec(f"rm {temp_b64_path}")
+        
+        print(f"Successfully uploaded {path}")
 
