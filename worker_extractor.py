@@ -1,6 +1,8 @@
-import sys
 import os
+import sys
+
 from resume_extractor import extract_resume_content
+
 
 def main():
     if len(sys.argv) < 2:
@@ -14,6 +16,7 @@ def main():
 
     result = extract_resume_content(file_path)
     print(result)
+
 
 if __name__ == "__main__":
     main()

@@ -22,6 +22,10 @@
                 <span class="text-lg font-bold text-slate-800 tracking-tight">Resume<span class="text-teal-600">Builder</span></span>
             </a>
             <div class="flex items-center gap-4">
+                <div id="health-status" class="hidden md:flex items-center gap-2 text-xs font-medium bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200 transition-colors" title="System Health">
+                    <span class="w-2 h-2 rounded-full bg-slate-300 animate-pulse" id="health-dot"></span>
+                    <span id="health-text" class="text-slate-500">System Check...</span>
+                </div>
                 {% if session.get('user') %}
                     <span class="text-sm font-medium text-slate-500">Welcome, <span class="text-slate-800">{{ session.get('user') }}</span></span>
                     <a href="/logout" class="text-sm font-medium text-slate-400 hover:text-rose-600 transition-colors">Logout</a>

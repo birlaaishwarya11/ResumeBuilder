@@ -221,6 +221,14 @@
                              <div id="apiKeyContainer" class="hidden">
                                  <input type="password" id="apiKeyInput" placeholder="Enter API Key (not stored)" class="w-full border border-slate-200 rounded-lg p-2.5 text-sm bg-yellow-50 focus:border-yellow-400">
                              </div>
+                             
+                             <div class="flex items-center gap-2 mb-2 bg-indigo-50 p-2 rounded-lg border border-indigo-100">
+                                <input type="checkbox" id="enableRag" class="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500">
+                                <label for="enableRag" class="text-xs font-bold text-indigo-700 cursor-pointer select-none">
+                                    Enable RAG (Check Knowledge Base for missing skills)
+                                </label>
+                             </div>
+                             
                              <button onclick="analyzeATS()" class="bg-purple-600 text-white px-4 py-3 rounded-xl hover:bg-purple-700 text-sm font-bold shadow-md transition-all flex justify-center items-center gap-2">
                                  <i class="fas fa-search-dollar"></i> Analyze Match Score
                              </button>
@@ -860,7 +868,12 @@ async function uploadResume() {
     
     const btn = document.querySelector('button[onclick="document.getElementById(\'resumeUpload\').click()"]');
     const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    
+    // Disable UI
+    btn.disabled = true;
+    input.disabled = true;
+    btn.classList.add('opacity-75', 'cursor-not-allowed');
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin text-teal-600"></i> Parsing...';
     
     try {
         const res = await fetch('/api/upload_resume', {
@@ -880,16 +893,33 @@ async function uploadResume() {
             document.getElementById('btn-fmt-yaml').classList.add('text-slate-500', 'hover:text-slate-700');
             
             previewResume();
-            alert('Resume imported successfully!');
+            
+            // Success Feedback
+            btn.innerHTML = '<i class="fas fa-check text-emerald-600"></i> Done';
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+                input.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+            }, 2000);
+            
         } else {
+            // Error Feedback
             alert('Error: ' + data.error);
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+            input.disabled = false;
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     } catch (e) {
         console.error(e);
-        alert('Upload failed');
+        alert('Upload failed: ' + e.message);
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+        input.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
     }
     
-    btn.innerHTML = originalHTML;
     input.value = '';
 }
 
@@ -985,7 +1015,16 @@ async function generatePDF() {
     const keywords = document.getElementById('keywordsInput').value;
     const btn = document.querySelector('button[onclick="generatePDF()"]');
     const originalHTML = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    
+    // Better Loading State
+    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Building...';
+    btn.classList.add('opacity-75', 'cursor-not-allowed');
+    btn.disabled = true;
+    
+    // Optional: Show a toast or overlay if it takes too long
+    const timeoutMsg = setTimeout(() => {
+        if(btn.disabled) btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Finalizing layout...';
+    }, 4000);
     
     try {
         const res = await fetch('/api/generate', {
@@ -994,16 +1033,32 @@ async function generatePDF() {
             body: JSON.stringify({keywords})
         });
         const data = await res.json();
+        
+        clearTimeout(timeoutMsg);
+        
         if(data.status === 'success') {
-            alert('Resume generated! Check history to download.');
-            window.location.assign(window.location.pathname + '?tab=history&t=' + new Date().getTime());
+            // Success Animation
+            btn.innerHTML = '<i class="fas fa-check"></i> Done!';
+            btn.classList.remove('bg-teal-600', 'hover:bg-teal-500');
+            btn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+            
+            setTimeout(() => {
+                alert('Resume generated! Check history to download.');
+                window.location.assign(window.location.pathname + '?tab=history&t=' + new Date().getTime());
+            }, 500);
         } else {
             alert('Error: ' + data.message);
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+            btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     } catch(e) {
+        clearTimeout(timeoutMsg);
         alert('Network error');
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
     }
-    btn.innerHTML = originalHTML;
 }
 
 async function analyzeATS() {
@@ -1011,43 +1066,155 @@ async function analyzeATS() {
     const model = document.getElementById('modelSelect').value;
     const api_key = document.getElementById('apiKeyInput').value;
     const resume_source = document.getElementById('resumeSourceSelect').value;
+    const enable_rag = document.getElementById('enableRag').checked;
     const resultDiv = document.getElementById('analysisResult');
     
     if(!jd_text) return alert("Please enter Job Description");
     
-    resultDiv.innerHTML = '<div class="text-center text-purple-600"><i class="fas fa-spinner fa-spin mr-2"></i> Analyzing...</div>';
+    // Better Progress Indicator
+    resultDiv.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-10 gap-4">
+            <div class="w-10 h-10 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+            <div class="text-center">
+                <p class="font-bold text-purple-700">Analyzing Resume Match...</p>
+                <p class="text-xs text-slate-500 mt-1">Comparing keywords, skills, and experience against JD.</p>
+                ${enable_rag ? '<p class="text-xs text-indigo-500 mt-2 font-medium animate-pulse"><i class="fas fa-brain mr-1"></i> Consulting Knowledge Base...</p>' : ''}
+            </div>
+        </div>
+    `;
     resultDiv.classList.remove('hidden');
     
     try {
         const res = await fetch('/api/analyze', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({jd_text, model, api_key, resume_source})
+            body: JSON.stringify({jd_text, model, api_key, resume_source, enable_rag})
         });
         const data = await res.json();
         
         let html = '';
-        if(data.score) html += `<div class="font-bold text-2xl mb-3 text-slate-800 text-center border-b pb-2">Score: <span class="text-purple-600">${data.score}</span>/100</div>`;
-        if(data.summary) html += `<p class="mb-4 italic text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-100">${data.summary}</p>`;
+        const score = data.match_score || data.score;
         
-        if(data.missing_keywords && data.missing_keywords.length > 0) {
-            html += `<div class="font-bold text-rose-600 mt-4 mb-2"><i class="fas fa-exclamation-triangle mr-2"></i>Missing Keywords:</div>
-                     <div class="flex flex-wrap gap-2">`;
-            data.missing_keywords.forEach(k => html += `<span class="bg-rose-50 text-rose-700 px-2 py-1 rounded text-xs border border-rose-100">${k}</span>`);
+        // 1. Score Visualization (Overall)
+        if(score !== undefined) {
+            let scoreColor = score >= 80 ? 'text-emerald-600' : (score >= 60 ? 'text-amber-600' : 'text-rose-600');
+            let strokeColor = score >= 80 ? 'text-emerald-500' : (score >= 60 ? 'text-amber-500' : 'text-rose-500');
+            
+            html += `<div class="flex items-start gap-6 mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <div class="relative w-24 h-24 flex-shrink-0">
+                             <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                                <path class="text-slate-200" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3" />
+                                <path class="${strokeColor}" stroke-dasharray="${score}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3" />
+                             </svg>
+                             <div class="absolute inset-0 flex items-center justify-center font-bold text-xl ${scoreColor}">${score}%</div>
+                        </div>
+                        <div class="flex-grow">
+                            <h4 class="font-bold text-lg text-slate-800 mb-1">Match Analysis</h4>
+                            <p class="text-sm text-slate-600 italic leading-relaxed">"${data.summary || 'No summary provided.'}"</p>
+                        </div>
+                     </div>`;
+        }
+
+        // 1.5 Section Scores
+        if(data.section_scores) {
+            html += `<div class="grid grid-cols-3 gap-4 mb-6">`;
+            for (const [key, val] of Object.entries(data.section_scores)) {
+                let color = val >= 80 ? 'bg-emerald-500' : (val >= 60 ? 'bg-amber-500' : 'bg-rose-500');
+                let text = val >= 80 ? 'text-emerald-700' : (val >= 60 ? 'text-amber-700' : 'text-rose-700');
+                html += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-100 text-center shadow-sm">
+                            <div class="text-xs font-bold text-slate-500 uppercase mb-1">${key}</div>
+                            <div class="font-bold text-lg ${text}">${val}%</div>
+                            <div class="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
+                                <div class="${color} h-full rounded-full transition-all duration-500" style="width: ${val}%"></div>
+                            </div>
+                         </div>`;
+            }
             html += `</div>`;
         }
         
+        // 2. Missing Keywords
+        if(data.missing_keywords && data.missing_keywords.length > 0) {
+            html += `<div class="mb-6">
+                        <div class="font-bold text-rose-700 mb-3 text-sm flex items-center gap-2">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Missing Keywords / Skills
+                        </div>
+                        <div class="flex flex-wrap gap-2 bg-rose-50/50 p-4 rounded-xl border border-rose-100">`;
+            data.missing_keywords.forEach(k => {
+                html += `<span class="bg-white text-rose-700 px-3 py-1.5 rounded-lg text-xs font-bold border border-rose-100 shadow-sm flex items-center gap-2">
+                            <i class="fas fa-times-circle text-rose-400"></i> ${k}
+                         </span>`;
+            });
+            html += `   </div>
+                     </div>`;
+        }
+        
+        // 3. Improvement Suggestions
         if(data.suggestions && data.suggestions.length > 0) {
-            html += `<div class="font-bold text-teal-600 mt-4 mb-2"><i class="fas fa-lightbulb mr-2"></i>Suggestions:</div>
-                     <ul class="space-y-2">`;
-            data.suggestions.forEach(s => html += `<li class="flex items-start gap-2 text-slate-700 bg-teal-50/50 p-2 rounded-lg"><i class="fas fa-angle-right mt-1 text-teal-400"></i><span>${s}</span></li>`);
-            html += `</ul>`;
+            html += `<div class="mb-6">
+                        <div class="font-bold text-teal-700 mb-3 text-sm flex items-center gap-2">
+                            <i class="fas fa-lightbulb"></i>
+                            Actionable Improvements
+                        </div>
+                        <ul class="space-y-2">`;
+            data.suggestions.forEach(s => {
+                html += `<li class="flex items-start gap-3 text-slate-700 text-sm bg-teal-50/50 p-3 rounded-xl border border-teal-100/50">
+                            <div class="mt-0.5 min-w-[16px]"><i class="fas fa-check-circle text-teal-500"></i></div>
+                            <span class="leading-relaxed">${s}</span>
+                         </li>`;
+            });
+            html += `   </ul>
+                     </div>`;
+        }
+        
+        // 4. RAG Insights (Structured)
+        if(data.rag_suggestions && data.rag_suggestions.length > 0) {
+            html += `<div class="mb-6 animate-fade-in-up">
+                        <div class="font-bold text-indigo-700 mb-3 text-sm flex items-center gap-2">
+                            <i class="fas fa-brain"></i>
+                            Knowledge Base Insights (RAG)
+                        </div>
+                        <div class="space-y-3">`;
+            
+            data.rag_suggestions.forEach(item => {
+                // Handle both old string format and new object format
+                const content = typeof item === 'object' ? item.content : item;
+                const source = typeof item === 'object' ? (item.source || 'Knowledge Base') : 'Knowledge Base';
+                
+                html += `<div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100 relative group">
+                            <div class="flex items-start gap-3">
+                                <div class="mt-0.5 min-w-[16px]"><i class="fas fa-star text-indigo-500"></i></div>
+                                <div>
+                                    <p class="text-sm text-slate-700 leading-relaxed mb-1">${content}</p>
+                                    <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-wide flex items-center gap-1">
+                                        <i class="fas fa-database"></i> ${source}
+                                    </div>
+                                </div>
+                            </div>
+                            <button onclick="navigator.clipboard.writeText(this.dataset.text); alert('Copied!')" data-text="${content}" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-white text-indigo-600 p-1.5 rounded-lg shadow-sm hover:bg-indigo-600 hover:text-white text-xs">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                         </div>`;
+            });
+            html += `   </div>
+                     </div>`;
+        }
+
+        if(data.source) {
+             html += `<div class="mt-6 pt-4 border-t border-slate-100 text-xs text-slate-400 text-center">
+                        Analysis performed by: <span class="font-mono font-medium text-slate-500">${data.source}</span>
+                      </div>`;
         }
 
         resultDiv.innerHTML = html;
         
     } catch(e) {
-        resultDiv.innerHTML = '<span class="text-red-500">Error analyzing.</span>';
+        resultDiv.innerHTML = `
+            <div class="bg-red-50 text-red-600 p-4 rounded-xl border border-red-100 text-center">
+                <i class="fas fa-exclamation-circle text-2xl mb-2"></i>
+                <p class="font-bold">Analysis Failed</p>
+                <p class="text-sm mt-1">${e.message || "Unknown error occurred."}</p>
+            </div>`;
     }
 }
 

@@ -1,10 +1,12 @@
-import sqlite3
 import os
 import shutil
-from werkzeug.security import generate_password_hash, check_password_hash
+import sqlite3
+
+from werkzeug.security import check_password_hash, generate_password_hash
 
 DB_NAME = os.path.join("data", "users.db")
 DATA_DIR = "data"
+
 
 class UserManager:
     def __init__(self):
@@ -14,10 +16,12 @@ class UserManager:
     def _init_db(self):
         conn = sqlite3.connect(DB_NAME)
         c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS users
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS users
                      (id INTEGER PRIMARY KEY AUTOINCREMENT,
                       username TEXT UNIQUE NOT NULL,
-                      password_hash TEXT NOT NULL)''')
+                      password_hash TEXT NOT NULL)"""
+        )
         conn.commit()
         conn.close()
 
@@ -29,20 +33,19 @@ class UserManager:
             password_hash = generate_password_hash(password)
             conn = sqlite3.connect(DB_NAME)
             c = conn.cursor()
-            c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", 
-                      (username, password_hash))
+            c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
             conn.commit()
             conn.close()
-            
+
             # Create private directory
             user_dir = os.path.join(DATA_DIR, username)
             os.makedirs(user_dir, exist_ok=True)
-            
+
             # Initialize with default resume.yaml if not exists
             default_resume = "resume.yaml"
             if os.path.exists(default_resume):
                 shutil.copy(default_resume, os.path.join(user_dir, "resume.yaml"))
-                
+
             return True
         except sqlite3.IntegrityError:
             return False
@@ -56,7 +59,7 @@ class UserManager:
         c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
         user = c.fetchone()
         conn.close()
-        
+
         if user and check_password_hash(user[0], password):
             return True
         return False

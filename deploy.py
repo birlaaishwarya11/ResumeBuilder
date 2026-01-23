@@ -1,9 +1,11 @@
 import argparse
 import logging
-from truefoundry.deploy import Service, Image, Port, PythonBuild, Resources
+
+from truefoundry.deploy import Image, Port, PythonBuild, Resources, Service
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
+
 
 def deploy(workspace_fqn):
     # Define the service
@@ -13,16 +15,10 @@ def deploy(workspace_fqn):
             build_source=PythonBuild(
                 command="gunicorn app:app --bind 0.0.0.0:8000",
                 requirements_path="requirements.txt",
-                python_version="3.11"
+                python_version="3.11",
             )
         ),
-        ports=[
-            Port(
-                port=8000,
-                expose=True,
-                protocol="http"
-            )
-        ],
+        ports=[Port(port=8000, expose=True, protocol="http")],
         resources=Resources(
             cpu_request=0.5,
             cpu_limit=1.0,
@@ -47,10 +43,16 @@ def deploy(workspace_fqn):
     print(f"Deployment triggered: {deployment.id}")
     print(f"Check status at: {deployment.dashboard_url}")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Deploy ResumeBuilder to TrueFoundry")
-    parser.add_argument("--workspace_fqn", type=str, required=True, help="The Fully Qualified Name of the TrueFoundry workspace (e.g., 'my-org:my-workspace')")
-    
+    parser.add_argument(
+        "--workspace_fqn",
+        type=str,
+        required=True,
+        help="The Fully Qualified Name of the TrueFoundry workspace (e.g., 'my-org:my-workspace')",
+    )
+
     args = parser.parse_args()
-    
+
     deploy(args.workspace_fqn)
