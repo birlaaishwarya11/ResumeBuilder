@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Create directory for persistent data (User data, ChromaDB)
-RUN mkdir -p /app/users /app/chroma_db
+# Create directory for persistent data
+RUN mkdir -p /app/data
 
 # Expose port
 EXPOSE 5001
