@@ -11,10 +11,16 @@ from resume_parser import to_text, parse_text
 # from resume_extractor import extract_resume_content # Removed local extraction
 from daytona_orchestrator import DaytonaOrchestrator
 from werkzeug.utils import secure_filename
+from rag_agent import RagAgent
+from knowledge_base import KnowledgeBase
+from mcp_servers import doc_server, ats_server
 
 app = Flask(__name__)
 # Initialize Daytona Orchestrator
 orchestrator = DaytonaOrchestrator()
+# Initialize RAG Agent (lazy init or global)
+rag_agent = RagAgent()
+kb = KnowledgeBase()
 
 app.config["SECRET_KEY"] = "super-secret-key-change-in-production"
 
@@ -87,6 +93,46 @@ def stash_jd():
     session['stashed_jd'] = data.get('text')
     return jsonify({"status": "success"})
 
+@app.route('/api/convert', methods=['POST'])
+@login_required
+def convert_format():
+    text = request.json.get('text')
+    from_fmt = request.json.get('from')
+    to_fmt = request.json.get('to')
+    
+    try:
+        data = {}
+        # Parse input
+        if from_fmt == 'yaml':
+            data = yaml.safe_load(text)
+        else:
+            data = parse_text(text)
+            
+        # Convert to output
+        if to_fmt == 'yaml':
+            result = yaml.dump(data, sort_keys=False)
+        else:
+            result = to_text(data)
+            
+        return jsonify({"status": "success", "result": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+@app.route('/api/save_jd', methods=['POST'])
+@login_required
+def save_jd():
+    user = get_current_user()
+    user_dir = user_manager.get_user_dir(user)
+    text = request.json.get('text')
+    
+    try:
+        jd_path = os.path.join(user_dir, "job_description.txt")
+        with open(jd_path, 'w') as f:
+            f.write(text)
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/upload_resume', methods=['POST'])
 @login_required
 def upload_resume():
@@ -115,6 +161,10 @@ def upload_resume():
             
             # Update resume.yaml
             parsed_data = parse_text(extracted_text)
+            
+            # Add to Knowledge Base (Graph Extraction)
+            kb.add_text(extracted_text, source=f"Resume: {file.filename}")
+            
             resume_path = os.path.join(user_dir, "resume.yaml")
             with open(resume_path, 'w') as f:
                 yaml.dump(parsed_data, f, sort_keys=False)
@@ -145,8 +195,13 @@ def dashboard():
     pdfs = [f for f in os.listdir(user_dir) if f.endswith('.pdf')]
     pdfs.sort(reverse=True) # Show newest first
     
-    # Check for stashed JD
+    # Check for stashed JD or saved JD file
     stashed_jd = session.pop('stashed_jd', '')
+    if not stashed_jd:
+        jd_path = os.path.join(user_dir, "job_description.txt")
+        if os.path.exists(jd_path):
+            with open(jd_path, 'r') as f:
+                stashed_jd = f.read()
     
     # Load style
     style_path = os.path.join(user_dir, "style.json")
@@ -203,8 +258,18 @@ def update_resume():
     style = request.json.get('style', {})
     
     try:
-        # Parse Text to Dict
-        data = parse_text(text_content)
+        # Check if text_content is already valid YAML
+        # If the user edited the "raw text" which is usually markdown-like, 
+        # but pasted YAML, we should detect it.
+        try:
+            # Try parsing as YAML directly first
+            data = yaml.safe_load(text_content)
+            # Basic validation: must be a dict
+            if not isinstance(data, dict):
+                raise ValueError("Not a dictionary")
+        except Exception:
+            # Fallback to custom parser
+            data = parse_text(text_content)
         
         # Save as YAML
         with open(os.path.join(user_dir, "resume.yaml"), 'w') as f:
@@ -283,20 +348,7 @@ def generate():
         # Generate via Worker Sandbox
         # generate_pdf(data, output_path, template_dir='templates', style=style)
         
-        # We need to pass data and style to orchestrator
-        # The orchestrator currently only takes data. I should update it to take style too if needed,
-        # but generate_resume.py takes yaml data. We can merge style into data or update generate_resume.py
-        # For now, let's assume style is handled by merging it into the data or the script handles it.
-        # Actually generate_resume.py in current state takes data and uses 'style' var but only from args or hardcoded?
-        # Let's check generate_resume.py again. It accepts --data.
-        # It renders with `style=style or {}`.
-        # So we should pass style in the yaml or update generate_resume.py to take style file.
-        # For simplicity, let's update data to include style under a '_style' key if the template supports it,
-        # or just stick to basic generation for now.
-        # Wait, the user requirement is "Generating the final PDF".
-        # I'll update orchestrator to pass style if I can, but let's just get basic generation working first.
-        
-        pdf_content = orchestrator.generate_pdf(data)
+        pdf_content = orchestrator.generate_pdf(data, style_data=style)
         
         # Save the returned PDF content
         with open(output_path, 'wb') as f:
@@ -388,6 +440,7 @@ def analyze():
     jd_text = request.json.get('jd_text')
     model = request.json.get('model', 'ollama/llama3') # Default
     api_key = request.json.get('api_key') # Optional API Key
+    resume_source = request.json.get('resume_source', 'current')
     
     # Save JD temporarily
     jd_path = os.path.join(user_dir, "job_description.txt")
@@ -395,11 +448,150 @@ def analyze():
         f.write(jd_text)
         
     resume_path = os.path.join(user_dir, "resume.yaml")
+    resume_data = None
+    
+    if resume_source != 'current' and resume_source.endswith('.pdf'):
+        # Load from snapshot
+        json_filename = resume_source.replace('.pdf', '.json')
+        json_path = os.path.join(user_dir, json_filename)
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, 'r') as f:
+                    snapshot = json.load(f)
+                    resume_data = snapshot.get('data')
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Failed to load snapshot: {str(e)}"}), 500
     
     # Pass API Key securely
-    analyzer = AIATSAnalyzer(resume_path, jd_path, model=model, api_key=api_key)
+    analyzer = AIATSAnalyzer(resume_path, jd_path, model=model, api_key=api_key, resume_data=resume_data)
     result = analyzer.analyze()
     
+    return jsonify(result)
+
+# --- New RAG & MCP Endpoints ---
+
+@app.route('/api/kb/upload', methods=['POST'])
+@login_required
+def kb_upload():
+    """Upload documents to Knowledge Base."""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    files = request.files.getlist('file')
+    
+    try:
+        saved_paths = []
+        user = get_current_user()
+        user_dir = user_manager.get_user_dir(user)
+        kb_upload_dir = os.path.join(user_dir, "kb_uploads")
+        if not os.path.exists(kb_upload_dir):
+            os.makedirs(kb_upload_dir)
+
+        for file in files:
+            if file.filename:
+                path = os.path.join(kb_upload_dir, secure_filename(file.filename))
+                file.save(path)
+                saved_paths.append(path)
+                
+        result = kb.add_documents(saved_paths)
+        return jsonify({"status": "success", "message": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/kb/add_text', methods=['POST'])
+@login_required
+def kb_add_text():
+    """Add raw text or web link to Knowledge Base."""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Invalid JSON"}), 400
+            
+        text = data.get('text')
+        source = data.get('source', 'manual_entry')
+        
+        if not text:
+            return jsonify({"error": "No text provided"}), 400
+            
+        # Check if text is a URL
+        import validators
+        if validators.url(text.strip()):
+            result = kb.add_web_page(text.strip())
+        else:
+            result = kb.add_text(text, source)
+            
+        return jsonify({"status": "success", "message": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/kb/add_link', methods=['POST'])
+@login_required
+def kb_add_link():
+    """Explicitly add a link to scrape."""
+    try:
+        data = request.json
+        url = data.get('url')
+        if not url:
+            return jsonify({"error": "No URL provided"}), 400
+            
+        result = kb.add_web_page(url)
+        return jsonify({"status": "success", "message": result})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/rag/find_bullets', methods=['POST'])
+@login_required
+def rag_find_bullets():
+    """Find missing bullet points using RAG."""
+    data = request.json
+    query = data.get('query')
+    model = data.get('model')
+    api_key = data.get('api_key')
+    
+    if not query:
+        return jsonify({"error": "Query required"}), 400
+        
+    try:
+        suggestions_json = rag_agent.find_lost_bullets(query, model=model, api_key=api_key)
+        # Parse JSON string if necessary, assuming agent returns string
+        try:
+            suggestions = json.loads(suggestions_json)
+        except:
+            # Fallback if LLM didn't return valid JSON
+            suggestions = [suggestions_json]
+            
+        return jsonify({"status": "success", "suggestions": suggestions})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/rag/interview_prep', methods=['POST'])
+@login_required
+def rag_interview_prep():
+    """Get interview answers/coaching."""
+    data = request.json
+    question = data.get('question')
+    model = data.get('model')
+    api_key = data.get('api_key')
+    
+    if not question:
+        return jsonify({"error": "Question required"}), 400
+        
+    try:
+        answer = rag_agent.prep_for_interview(question, model=model, api_key=api_key)
+        return jsonify({"status": "success", "answer": answer})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/mcp/validate_resume', methods=['POST'])
+@login_required
+def mcp_validate_resume():
+    """Run the ATS Validator Server check."""
+    # Temporarily point doc_server to current user's resume
+    # In a real server this would be request-scoped or passed in
+    user = get_current_user()
+    user_dir = user_manager.get_user_dir(user)
+    doc_server.resume_path = os.path.join(user_dir, "resume.yaml")
+    
+    result = ats_server.validate_resume()
     return jsonify(result)
 
 @app.route('/download/<filename>')
@@ -411,5 +603,6 @@ def download_file(filename):
 
 if __name__ == '__main__':
     # Listen on all interfaces for Daytona access
-    port = int(os.environ.get("PORT", 5000))
+    # Port 5000 is often taken by AirPlay on macOS, so we default to 5001
+    port = int(os.environ.get("PORT", 5001))
     app.run(debug=True, host='0.0.0.0', port=port)

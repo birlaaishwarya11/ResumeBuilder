@@ -12,3 +12,15 @@ nltk
 mcp
 daytona-sdk
 gunicorn
+langgraph
+langchain
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-ollama
+langchain-chroma
+chromadb
+unstructured
+beautifulsoup4
+validators
+pypdf

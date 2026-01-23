@@ -116,7 +116,7 @@ class DaytonaOrchestrator:
             if sandbox:
                 self.cleanup_worker(sandbox)
 
-    def generate_pdf(self, resume_data):
+    def generate_pdf(self, resume_data, style_data=None):
         """
         1. Create Worker
         2. Upload data & scripts
@@ -141,13 +141,21 @@ class DaytonaOrchestrator:
             yaml_str = yaml.dump(resume_data)
             self.upload_file(sandbox, 'resume.yaml', yaml_str)
 
+            # Upload Style
+            cmd_style_arg = ""
+            if style_data:
+                import json
+                style_str = json.dumps(style_data)
+                self.upload_file(sandbox, 'style.json', style_str)
+                cmd_style_arg = " --style style.json"
+
             # Debug: List files and check CWD
             print("Debugging sandbox state...")
             debug_res = sandbox.process.exec("pwd && ls -la && ls -la templates")
             print(f"Sandbox State:\n{debug_res.result}")
 
             # Run
-            cmd = "python generate_resume.py --data resume.yaml"
+            cmd = f"python generate_resume.py --data resume.yaml{cmd_style_arg}"
             print(f"Running command: {cmd}")
             response = sandbox.process.exec(cmd)
             print(f"Worker Output:\n{response.result}")

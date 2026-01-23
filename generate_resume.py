@@ -24,6 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description='Generate Resume PDF from YAML data.')
     parser.add_argument('--keywords', type=str, help='Comma separated keywords to include in filename (e.g., "LLM,Python")')
     parser.add_argument('--data', type=str, default='resume.yaml', help='Path to YAML data file')
+    parser.add_argument('--style', type=str, default=None, help='Path to JSON style file')
     
     args = parser.parse_args()
     
@@ -32,6 +33,15 @@ def main():
     except FileNotFoundError:
         print(f"Error: Data file '{args.data}' not found.")
         sys.exit(1)
+
+    style = {}
+    if args.style:
+        try:
+            import json
+            with open(args.style, 'r') as f:
+                style = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load style file: {e}")
 
     # Construct filename
     base_name = "Aishwarya_Birla_Resume"
@@ -45,7 +55,7 @@ def main():
     
     output_filename = f"{base_name}{keywords_part}_{date_str}.pdf"
     
-    generate_pdf(data, output_filename)
+    generate_pdf(data, output_filename, style=style)
 
 if __name__ == "__main__":
     main()

@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ resume.name }} - Resume</title>
+    <!-- Google Fonts for Playfair Display and others -->
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Merriweather:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
         @page {
             size: Letter;
@@ -28,6 +30,7 @@
             font-size: 1.6em;
             font-weight: bold;
             text-transform: uppercase;
+            font-family: 'Playfair Display', serif;
             color: {{ style.accent_color | default('#000000') }};
         }
         .contact-info {

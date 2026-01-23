@@ -6,31 +6,41 @@
     <title>ResumeBuilder - AI-Powered Resume Optimization</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Playfair Display', serif; }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
         .hero-pattern {
-            background-color: #ffffff;
-            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%234f46e5' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            background-color: #0f172a;
+            background-image: radial-gradient(rgba(45, 212, 191, 0.1) 1px, transparent 1px);
+            background-size: 30px 30px;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans">
+<body class="bg-slate-900 text-slate-200">
 
     <!-- Navigation -->
-    <nav class="bg-white shadow-sm fixed w-full z-10">
+    <nav class="glass-card fixed w-full z-50 border-b border-white/5">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
-                    <i class="fas fa-file-alt text-indigo-600 text-2xl mr-2"></i>
-                    <span class="font-bold text-xl text-gray-900">ResumeBuilder</span>
+                    <i class="fas fa-file-alt text-teal-400 text-2xl mr-2"></i>
+                    <span class="font-bold text-xl text-slate-100 tracking-tight">ResumeBuilder</span>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="#features" class="text-gray-600 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">Features</a>
-                    <a href="#how-it-works" class="text-gray-600 hover:text-indigo-600 px-3 py-2 rounded-md text-sm font-medium">How it Works</a>
+                <div class="flex items-center space-x-6">
+                    <a href="#features" class="text-slate-400 hover:text-teal-400 text-sm font-medium transition-colors">Features</a>
+                    <a href="#how-it-works" class="text-slate-400 hover:text-teal-400 text-sm font-medium transition-colors">How it Works</a>
                     {% if user %}
-                        <a href="/dashboard" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out">Dashboard</a>
+                        <a href="/dashboard" class="bg-teal-500 hover:bg-teal-600 text-slate-900 px-5 py-2 rounded-full text-sm font-bold shadow-lg shadow-teal-500/20 transition-all hover:scale-105">Dashboard</a>
                     {% else %}
-                        <a href="/login" class="text-indigo-600 hover:text-indigo-900 px-3 py-2 rounded-md text-sm font-medium">Log In</a>
-                        <a href="/signup" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium transition duration-150 ease-in-out">Get Started</a>
+                        <a href="/login" class="text-slate-300 hover:text-white text-sm font-medium transition-colors">Log In</a>
+                        <a href="/signup" class="bg-teal-500 hover:bg-teal-600 text-slate-900 px-5 py-2 rounded-full text-sm font-bold shadow-lg shadow-teal-500/20 transition-all hover:scale-105">Get Started</a>
                     {% endif %}
                 </div>
             </div>
@@ -38,34 +48,29 @@
     </nav>
 
     <!-- Hero Section -->
-    <div class="relative bg-white overflow-hidden hero-pattern pt-24 pb-16 lg:pt-32 lg:pb-24">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-            <div class="text-center">
-                <h1 class="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
-                    <span class="block">Craft the Perfect Resume</span>
-                    <span class="block text-indigo-600">Beat the ATS Bots</span>
+    <div class="relative hero-pattern pt-32 pb-20 lg:pt-40 lg:pb-28">
+        <div class="absolute inset-0 bg-gradient-to-b from-transparent to-slate-900"></div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="text-center max-w-4xl mx-auto">
+                <h1 class="text-5xl tracking-tight font-bold text-white sm:text-6xl md:text-7xl mb-6">
+                    Craft the Perfect Resume <br>
+                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-500">Beat the ATS Bots</span>
                 </h1>
-                <p class="mt-3 max-w-md mx-auto text-base text-gray-500 sm:text-lg md:mt-5 md:text-xl md:max-w-3xl">
-                    Build ATS-optimized resumes in minutes. Use AI to analyze job descriptions, customize styles, and manage versions effortlessly.
+                <p class="mt-4 max-w-2xl mx-auto text-lg text-slate-400 sm:text-xl md:mt-6">
+                    Build ATS-optimized resumes in minutes. Use AI to analyze job descriptions, customize styles, and manage versions effortlessly with a modern, professional tool.
                 </p>
-                <div class="mt-5 max-w-md mx-auto sm:flex sm:justify-center md:mt-8">
+                <div class="mt-10 max-w-sm mx-auto sm:max-w-none sm:flex sm:justify-center gap-4">
                     {% if user %}
-                        <div class="rounded-md shadow">
-                            <a href="/dashboard" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg md:px-10">
-                                Go to Dashboard
-                            </a>
-                        </div>
+                        <a href="/dashboard" class="flex items-center justify-center px-8 py-4 border border-transparent text-base font-bold rounded-full text-slate-900 bg-teal-500 hover:bg-teal-400 md:text-lg shadow-lg shadow-teal-500/25 transition-all hover:scale-105">
+                            Go to Dashboard
+                        </a>
                     {% else %}
-                        <div class="rounded-md shadow">
-                            <a href="/signup" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 md:py-4 md:text-lg md:px-10">
-                                Start Building Free
-                            </a>
-                        </div>
-                        <div class="mt-3 rounded-md shadow sm:mt-0 sm:ml-3">
-                            <a href="/login" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-indigo-600 bg-white hover:bg-gray-50 md:py-4 md:text-lg md:px-10">
-                                Log In
-                            </a>
-                        </div>
+                        <a href="/signup" class="flex items-center justify-center px-8 py-4 border border-transparent text-base font-bold rounded-full text-slate-900 bg-teal-500 hover:bg-teal-400 md:text-lg shadow-lg shadow-teal-500/25 transition-all hover:scale-105">
+                            Start Building Free
+                        </a>
+                        <a href="/login" class="flex items-center justify-center px-8 py-4 border border-slate-700 text-base font-bold rounded-full text-slate-300 bg-slate-800/50 hover:bg-slate-800 hover:text-white md:text-lg backdrop-blur-sm transition-all">
+                            Log In
+                        </a>
                     {% endif %}
                 </div>
             </div>
@@ -73,124 +78,146 @@
     </div>
 
     <!-- Features Section -->
-    <div id="features" class="py-12 bg-white">
+    <div id="features" class="py-24 bg-slate-900 relative">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="lg:text-center">
-                <h2 class="text-base text-indigo-600 font-semibold tracking-wide uppercase">Features</h2>
-                <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
+            <div class="text-center mb-16">
+                <h2 class="text-teal-400 font-semibold tracking-wider uppercase text-sm mb-2">Features</h2>
+                <p class="text-3xl font-bold text-white sm:text-4xl">
                     Everything you need to get hired
                 </p>
             </div>
 
-            <div class="mt-10">
-                <dl class="space-y-10 md:space-y-0 md:grid md:grid-cols-2 md:gap-x-8 md:gap-y-10">
-                    <div class="relative">
-                        <dt>
-                            <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-indigo-500 text-white">
-                                <i class="fas fa-magic"></i>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
+                <!-- Feature 1 -->
+                <div class="glass-card p-8 rounded-2xl hover:bg-slate-800/80 transition-all duration-300">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-12 w-12 rounded-xl bg-teal-500/10 text-teal-400">
+                                <i class="fas fa-magic text-xl"></i>
                             </div>
-                            <p class="ml-16 text-lg leading-6 font-medium text-gray-900">AI ATS Analyzer</p>
-                        </dt>
-                        <dd class="mt-2 ml-16 text-base text-gray-500">
-                            Paste a job description and get an instant score. Our AI checks for keywords and suggests improvements to increase your chances.
-                        </dd>
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-xl font-bold text-white mb-2">AI ATS Analyzer</h3>
+                            <p class="text-slate-400 leading-relaxed">
+                                Paste a job description and get an instant score. Our AI checks for keywords and suggests improvements to increase your chances.
+                            </p>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="relative">
-                        <dt>
-                            <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-indigo-500 text-white">
-                                <i class="fas fa-palette"></i>
+                <!-- Feature 2 -->
+                <div class="glass-card p-8 rounded-2xl hover:bg-slate-800/80 transition-all duration-300">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-12 w-12 rounded-xl bg-blue-500/10 text-blue-400">
+                                <i class="fas fa-palette text-xl"></i>
                             </div>
-                            <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Industry Standard Styling</p>
-                        </dt>
-                        <dd class="mt-2 ml-16 text-base text-gray-500">
-                            Choose from ATS-friendly fonts (Times New Roman, Arial) and layouts designed to pass automated screening systems cleanly.
-                        </dd>
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-xl font-bold text-white mb-2">Industry Standard Styling</h3>
+                            <p class="text-slate-400 leading-relaxed">
+                                Choose from ATS-friendly fonts and clean layouts designed to pass automated screening systems without parsing errors.
+                            </p>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="relative">
-                        <dt>
-                            <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-indigo-500 text-white">
-                                <i class="fas fa-history"></i>
+                <!-- Feature 3 -->
+                <div class="glass-card p-8 rounded-2xl hover:bg-slate-800/80 transition-all duration-300">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-12 w-12 rounded-xl bg-purple-500/10 text-purple-400">
+                                <i class="fas fa-history text-xl"></i>
                             </div>
-                            <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Version Control</p>
-                        </dt>
-                        <dd class="mt-2 ml-16 text-base text-gray-500">
-                            Create different versions for different roles (e.g., "Google_PM", "Startup_Dev"). Restore any past version with a single click.
-                        </dd>
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-xl font-bold text-white mb-2">Version Control</h3>
+                            <p class="text-slate-400 leading-relaxed">
+                                Create different versions for different roles (e.g., "Google_PM", "Startup_Dev"). Restore any past version with a single click.
+                            </p>
+                        </div>
                     </div>
+                </div>
 
-                    <div class="relative">
-                        <dt>
-                            <div class="absolute flex items-center justify-center h-12 w-12 rounded-md bg-indigo-500 text-white">
-                                <i class="fas fa-eye"></i>
+                <!-- Feature 4 -->
+                <div class="glass-card p-8 rounded-2xl hover:bg-slate-800/80 transition-all duration-300">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0">
+                            <div class="flex items-center justify-center h-12 w-12 rounded-xl bg-orange-500/10 text-orange-400">
+                                <i class="fas fa-eye text-xl"></i>
                             </div>
-                            <p class="ml-16 text-lg leading-6 font-medium text-gray-900">Live Preview</p>
-                        </dt>
-                        <dd class="mt-2 ml-16 text-base text-gray-500">
-                            See changes instantly with our side-by-side editor. No more guessing how your PDF will look.
-                        </dd>
-                    </div>
-                </dl>
-            </div>
-        </div>
-    </div>
-
-    <!-- How It Works Section -->
-    <div id="how-it-works" class="py-16 bg-gray-50 overflow-hidden">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="lg:text-center mb-12">
-                <h2 class="text-base text-indigo-600 font-semibold tracking-wide uppercase">Guide</h2>
-                <p class="mt-2 text-3xl leading-8 font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-                    How to Use ResumeBuilder
-                </p>
-            </div>
-            
-            <div class="relative">
-                <div class="grid grid-cols-1 gap-8 md:grid-cols-3">
-                    <!-- Step 1 -->
-                    <div class="bg-white rounded-lg shadow-lg p-6 relative z-10">
-                        <div class="flex items-center justify-center h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 font-bold text-xl mb-4">1</div>
-                        <h3 class="text-xl font-bold text-gray-900 mb-2">Edit Content</h3>
-                        <p class="text-gray-600">
-                            Use the Markdown-style editor to update your details. 
-                            <br><code class="text-xs bg-gray-100 p-1 rounded"># Name: John Doe</code> creates a header.
-                        </p>
-                    </div>
-
-                    <!-- Step 2 -->
-                    <div class="bg-white rounded-lg shadow-lg p-6 relative z-10">
-                        <div class="flex items-center justify-center h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 font-bold text-xl mb-4">2</div>
-                        <h3 class="text-xl font-bold text-gray-900 mb-2">Optimize Style</h3>
-                        <p class="text-gray-600">
-                            Go to the <strong>Style</strong> tab. Select <strong>Times New Roman</strong> or <strong>Arial</strong> for best ATS readability. Keep font size between 9.5-10.5pt.
-                        </p>
-                    </div>
-
-                    <!-- Step 3 -->
-                    <div class="bg-white rounded-lg shadow-lg p-6 relative z-10">
-                        <div class="flex items-center justify-center h-10 w-10 rounded-full bg-indigo-100 text-indigo-600 font-bold text-xl mb-4">3</div>
-                        <h3 class="text-xl font-bold text-gray-900 mb-2">Tag & Generate</h3>
-                        <p class="text-gray-600">
-                            Enter a keyword like <strong>Google_SeniorPM</strong> in the "Target Role" field. Click <strong>Generate PDF</strong>. Your file will be saved and versioned automatically.
-                        </p>
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-xl font-bold text-white mb-2">Live Preview</h3>
+                            <p class="text-slate-400 leading-relaxed">
+                                See changes instantly with our side-by-side editor. No more guessing how your PDF will look before you generate it.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- How It Works Section -->
+    <div id="how-it-works" class="py-24 bg-slate-800/30 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-16">
+                <h2 class="text-teal-400 font-semibold tracking-wider uppercase text-sm mb-2">Guide</h2>
+                <p class="text-3xl font-bold text-white sm:text-4xl">
+                    How to Use ResumeBuilder
+                </p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+                <!-- Connector Line (Desktop) -->
+                <div class="hidden md:block absolute top-1/2 left-0 w-full h-0.5 bg-slate-700 -z-10 transform -translate-y-1/2"></div>
+
+                <!-- Step 1 -->
+                <div class="glass-card p-8 rounded-2xl relative text-center group hover:-translate-y-2 transition-transform duration-300">
+                    <div class="w-16 h-16 mx-auto bg-slate-900 rounded-full border-4 border-teal-500 flex items-center justify-center text-xl font-bold text-white mb-6 z-10 relative">1</div>
+                    <h3 class="text-xl font-bold text-white mb-3">Edit Content</h3>
+                    <p class="text-slate-400 text-sm">
+                        Use the YAML/Text editor to update your details. Structure your data clearly for the best parsing results.
+                    </p>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="glass-card p-8 rounded-2xl relative text-center group hover:-translate-y-2 transition-transform duration-300">
+                    <div class="w-16 h-16 mx-auto bg-slate-900 rounded-full border-4 border-blue-500 flex items-center justify-center text-xl font-bold text-white mb-6 z-10 relative">2</div>
+                    <h3 class="text-xl font-bold text-white mb-3">Optimize Style</h3>
+                    <p class="text-slate-400 text-sm">
+                        Customize fonts, accent colors, and sizes. Select a professional font like Playfair Display or Inter.
+                    </p>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="glass-card p-8 rounded-2xl relative text-center group hover:-translate-y-2 transition-transform duration-300">
+                    <div class="w-16 h-16 mx-auto bg-slate-900 rounded-full border-4 border-purple-500 flex items-center justify-center text-xl font-bold text-white mb-6 z-10 relative">3</div>
+                    <h3 class="text-xl font-bold text-white mb-3">Generate PDF</h3>
+                    <p class="text-slate-400 text-sm">
+                        Click <strong>Generate PDF</strong>. Your file is saved automatically. Analyze it against JDs to ensure a perfect match.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
-    <footer class="bg-white">
+    <footer class="bg-slate-900 border-t border-slate-800">
         <div class="max-w-7xl mx-auto py-12 px-4 sm:px-6 md:flex md:items-center md:justify-between lg:px-8">
             <div class="flex justify-center space-x-6 md:order-2">
-                <a href="#" class="text-gray-400 hover:text-gray-500">
+                <a href="#" class="text-slate-500 hover:text-teal-400 transition-colors">
                     <span class="sr-only">GitHub</span>
                     <i class="fab fa-github text-xl"></i>
                 </a>
+                <a href="#" class="text-slate-500 hover:text-teal-400 transition-colors">
+                    <span class="sr-only">Twitter</span>
+                    <i class="fab fa-twitter text-xl"></i>
+                </a>
             </div>
             <div class="mt-8 md:mt-0 md:order-1">
-                <p class="text-center text-base text-gray-400">
+                <p class="text-center text-sm text-slate-500">
                     &copy; 2026 ResumeBuilder. All rights reserved.
                 </p>
             </div>

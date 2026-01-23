@@ -8,7 +8,7 @@ from litellm import completion
 import subprocess
 
 # Default model: can be changed via env var or arg
-# Examples: "ollama/llama3", "gpt-3.5-turbo", "gemini/gemini-pro"
+# Examples: "ollama/llama3", "gpt-3.5-turbo", "gemini/gemini-1.5-flash"
 DEFAULT_MODEL = "ollama/llama3"
 
 def get_ollama_models():
@@ -29,11 +29,20 @@ def get_ollama_models():
     return []
 
 class AIATSAnalyzer:
-    def __init__(self, resume_path, job_description_path, model=None, api_key=None):
-        self.resume_data = self._load_yaml(resume_path)
+    def __init__(self, resume_path, job_description_path, model=None, api_key=None, resume_data=None):
+        if resume_data:
+            self.resume_data = resume_data
+        else:
+            self.resume_data = self._load_yaml(resume_path)
+            
         self.job_description = self._load_text(job_description_path)
         self.model = model or os.getenv("ATS_MODEL", DEFAULT_MODEL)
         self.api_key = api_key or os.getenv("ATS_API_KEY")
+
+        # Ensure Gemini API key is in environment for litellm
+        if self.model.startswith("gemini/") and self.api_key:
+            os.environ["GEMINI_API_KEY"] = self.api_key
+            os.environ["GOOGLE_API_KEY"] = self.api_key
 
         # Auto-fallback for Ollama if default model missing
         if self.model.startswith("ollama/") and not self.api_key:
