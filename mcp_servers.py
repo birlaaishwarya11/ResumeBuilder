@@ -16,8 +16,13 @@ class DocumentServer:
         self.resume_path = os.path.join(data_dir, "resume.yaml")
         self.history_dir = os.path.join(data_dir, "history")
         
+        # Check if directory exists before creating
         if not os.path.exists(self.history_dir):
-            os.makedirs(self.history_dir)
+            try:
+                os.makedirs(self.history_dir)
+            except FileExistsError:
+                # Handle race condition if multiple workers try to create it simultaneously
+                pass
 
     def read_resume(self) -> Dict[str, Any]:
         """Reads the current resume.yaml."""
