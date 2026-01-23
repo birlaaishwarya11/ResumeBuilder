@@ -35,4 +35,4 @@ ENV PORT=5001
 ENV FLASK_APP=app.py
 
 # Command to run the application using Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5001", "--workers", "2", "--timeout", "120", "app:app"]
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 app:app
