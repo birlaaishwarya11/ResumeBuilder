@@ -22,8 +22,7 @@ class UserManager:
         conn.close()
 
     def _ensure_data_dir(self):
-        if not os.path.exists(DATA_DIR):
-            os.makedirs(DATA_DIR)
+        os.makedirs(DATA_DIR, exist_ok=True)
 
     def create_user(self, username, password):
         try:

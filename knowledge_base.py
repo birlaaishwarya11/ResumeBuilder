@@ -8,7 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 # Configuration
-PERSIST_DIRECTORY = "./data/chroma_db"
+PERSIST_DIRECTORY = os.path.join("data", "chroma_db")
 # Using a local embedding model via Ollama (e.g., nomic-embed-text or llama3)
 # Fallback to a simple HuggingFace model if Ollama is not available? 
 # For now, let's assume the user has 'nomic-embed-text' or uses 'llama3' for embeddings too.
@@ -17,8 +17,7 @@ EMBEDDING_MODEL_NAME = "nomic-embed-text"
 class KnowledgeBase:
     def __init__(self):
         self.persist_directory = PERSIST_DIRECTORY
-        if not os.path.exists(self.persist_directory):
-            os.makedirs(self.persist_directory)
+        os.makedirs(self.persist_directory, exist_ok=True)
         
         # Initialize Embeddings
         # We can switch to OpenAIEmbeddings if API key is present
@@ -95,7 +94,7 @@ class KnowledgeBase:
         """Clears the database."""
         if os.path.exists(self.persist_directory):
             shutil.rmtree(self.persist_directory)
-            os.makedirs(self.persist_directory)
+            os.makedirs(self.persist_directory, exist_ok=True)
             self.vector_db = Chroma(
                 persist_directory=self.persist_directory,
                 embedding_function=self.embeddings
