@@ -8,7 +8,7 @@ from user_manager import UserManager
 from ai_ats_checker import AIATSAnalyzer
 # from generate_resume import generate_pdf # Removed local generation
 from resume_parser import to_text, parse_text
-# from resume_extractor import extract_resume_content # Removed local extraction
+from resume_extractor import extract_resume_content 
 from daytona_orchestrator import DaytonaOrchestrator
 from werkzeug.utils import secure_filename
 from rag_agent import RagAgent
