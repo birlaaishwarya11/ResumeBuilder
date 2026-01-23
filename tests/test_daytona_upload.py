@@ -74,6 +74,16 @@ class TestDaytonaUpload(unittest.TestCase):
         # 5. Cleanup
         self.assertTrue(any(f"rm {path}.b64" in cmd for cmd in cmds))
 
+    def test_cleanup_worker(self):
+        orchestrator = DaytonaOrchestrator()
+        orchestrator.daytona = MagicMock()
+        sandbox = MockSandbox()
+        
+        orchestrator.cleanup_worker(sandbox)
+        
+        # Verify delete is called with sandbox object
+        orchestrator.daytona.delete.assert_called_with(sandbox)
+
     def _decode_cmd(self, cmd):
         try:
             # cmd is: python -c "import base64; exec(base64.b64decode('...').decode('utf-8'))"

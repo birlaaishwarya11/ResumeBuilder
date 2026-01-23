@@ -64,7 +64,14 @@ class DaytonaOrchestrator:
         # Ensure we use delete() as remove() is deprecated/not available in this SDK version
         try:
             print(f"Deleting sandbox {sandbox.id}...")
-            self.daytona.delete(sandbox.id)
+            # Pass the sandbox object, not the ID, as per SDK docs
+            # If delete fails with attribute error, it might be because we passed a string before.
+            if hasattr(self.daytona, 'delete'):
+                self.daytona.delete(sandbox)
+            elif hasattr(self.daytona, 'remove'):
+                self.daytona.remove(sandbox)
+            else:
+                print("Warning: Daytona SDK does not have delete or remove method.")
             print(f"Sandbox {sandbox.id} deleted.")
         except Exception as e:
             print(f"Error cleaning up sandbox: {e}")
