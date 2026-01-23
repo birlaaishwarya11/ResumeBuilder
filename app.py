@@ -17,6 +17,8 @@ from resume_extractor import extract_resume_content
 
 # from generate_resume import generate_pdf # Removed local generation
 from resume_parser import ensure_resume_schema, parse_text, to_text
+from ai_resume_parser import ai_parser
+from resume_chat_agent import resume_chat_agent
 from user_manager import UserManager
 
 app = Flask(__name__)
@@ -153,11 +155,32 @@ def convert_format():
     text = request.json.get("text")
     from_fmt = request.json.get("from")
     to_fmt = request.json.get("to")
+    use_ai = request.json.get("use_ai", False)
 
     try:
         data = {}
         # Parse input
-        if from_fmt == "yaml":
+        if use_ai:
+            print("Using AI Parser for conversion...")
+            try:
+                # If from_fmt is yaml, we should probably dump it to text first or pass as is?
+                # AI parser expects text.
+                # If text is already YAML structure string, AI can probably handle it.
+                parsed_data = ai_parser.parse_resume(text)
+                if "error" in parsed_data or not parsed_data:
+                    raise Exception(parsed_data.get("error", "AI Parsing failed"))
+                data = parsed_data
+            except Exception as ai_err:
+                print(f"AI Conversion failed: {ai_err}")
+                # Fallback to normal parsing if AI fails?
+                # Or return error?
+                # If user explicitly asked for AI, maybe return error?
+                # But fallback is safer.
+                if from_fmt == "yaml":
+                    data = yaml.safe_load(text)
+                else:
+                    data = parse_text(text)
+        elif from_fmt == "yaml":
             data = yaml.safe_load(text)
         else:
             data = parse_text(text)
@@ -232,7 +255,20 @@ def upload_resume():
                 raise Exception(extracted_text or "Extraction returned empty")
 
             # Update resume.yaml
-            parsed_data = parse_text(extracted_text)
+            use_ai = request.form.get("use_ai") == "true"
+            
+            try:
+                if use_ai:
+                    print("Attempting AI parsing for uploaded resume...")
+                    parsed_data = ai_parser.parse_resume(extracted_text)
+                    if "error" in parsed_data or not parsed_data:
+                        raise Exception(parsed_data.get("error", "Empty result"))
+                else:
+                    # Fallback/Default to regex
+                    parsed_data = parse_text(extracted_text)
+            except Exception as e:
+                print(f"Parsing failed ({e}), falling back to regex parser.")
+                parsed_data = parse_text(extracted_text)
 
             # Add to Knowledge Base (Graph Extraction)
             try:
@@ -244,7 +280,14 @@ def upload_resume():
             resume_path = os.path.join(user_dir, "resume.yaml")
             with open(resume_path, "w") as f:
                 yaml.dump(parsed_data, f, sort_keys=False)
-            return jsonify({"status": "success", "text": extracted_text})
+            
+            # Save source text for chat context
+            with open(os.path.join(user_dir, "source_resume.txt"), "w") as f:
+                f.write(extracted_text)
+            
+            # Return the structured text so the user sees the clean version
+            structured_text = to_text(parsed_data)
+            return jsonify({"status": "success", "text": structured_text})
         except Exception as e:
             return jsonify({"error": f"Failed to parse resume: {str(e)}"}), 500
 
@@ -305,7 +348,14 @@ def preview_html():
 
     try:
         if text_content:
-            data = parse_text(text_content)
+            try:
+                # Try parsing as YAML first (in case editor is in YAML mode)
+                data = yaml.safe_load(text_content)
+                if not isinstance(data, dict):
+                    raise ValueError("Not a dictionary")
+            except Exception:
+                # Fallback to custom regex parser
+                data = parse_text(text_content)
         else:
             # Fallback to saved file
             resume_path = os.path.join(user_dir, "resume.yaml")
@@ -362,6 +412,110 @@ def update_resume():
         return jsonify({"status": "success"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route("/api/chat_update", methods=["POST"])
+@login_required
+def chat_update():
+    user = get_current_user()
+    user_dir = user_manager.get_user_dir(user)
+    
+    command = request.json.get("command")
+    target_format = request.json.get("format", "text")
+    # Current text from the editor (which might be YAML or custom format)
+    # We should convert it to structured dict first
+    current_text = request.json.get("text") 
+    
+    try:
+        current_resume = {}
+        if current_text:
+             try:
+                 if target_format == 'yaml':
+                     current_resume = yaml.safe_load(current_text)
+                 else:
+                     current_resume = parse_text(current_text)
+                     
+                 if not isinstance(current_resume, dict):
+                      # Fallback
+                      current_resume = parse_text(current_text)
+             except:
+                 current_resume = parse_text(current_text)
+        
+        if not current_resume:
+            # Load from file if not provided or empty
+            resume_path = os.path.join(user_dir, "resume.yaml")
+            if os.path.exists(resume_path):
+                with open(resume_path, "r") as f:
+                    current_resume = yaml.safe_load(f)
+            else:
+                 return jsonify({"status": "error", "message": "No resume found"}), 404
+
+        # Load source text
+        source_path = os.path.join(user_dir, "source_resume.txt")
+        source_text = ""
+        if os.path.exists(source_path):
+            with open(source_path, "r") as f:
+                source_text = f.read()
+                
+        # Load Template (for potential design updates)
+        template_path = os.path.join("templates", "resume.html")
+        template_content = ""
+        if os.path.exists(template_path):
+             with open(template_path, "r") as f:
+                 template_content = f.read()
+                
+        # Process
+        result = resume_chat_agent.process_command(current_resume, command, source_text, template_content)
+        
+        if "error" in result:
+             raise Exception(result["error"])
+             
+        # Handle Template Update
+        if result.get("action") == "update_template":
+             new_html = result.get("html")
+             if new_html:
+                 # Backup again just in case (overwriting previous backup is fine)
+                 with open(template_path + ".bak", "w") as f:
+                     f.write(template_content)
+                     
+                 with open(template_path, "w") as f:
+                     f.write(new_html)
+                     
+                 return jsonify({
+                     "status": "success",
+                     "action": "update_template",
+                     "message": "Template updated successfully. Refresh preview to see changes."
+                 })
+             else:
+                 raise Exception("Template update failed: No HTML returned")
+             
+        # Handle Data Update
+        if result.get("action") == "update_data":
+            updated_resume = result.get("data")
+        else:
+            # Legacy/Fallback if no action specified
+            updated_resume = result
+             
+        # Save
+        resume_path = os.path.join(user_dir, "resume.yaml")
+        with open(resume_path, "w") as f:
+            yaml.dump(updated_resume, f, sort_keys=False)
+            
+        # Format output
+        if target_format == 'yaml':
+            output_text = yaml.dump(updated_resume, sort_keys=False)
+        else:
+            output_text = to_text(updated_resume)
+            
+        return jsonify({
+            "status": "success", 
+            "action": "update_data",
+            "resume": updated_resume,
+            "text": output_text
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 @app.route("/api/analyze_ats", methods=["POST"])

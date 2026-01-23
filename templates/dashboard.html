@@ -67,7 +67,12 @@
                     </div>
                     
                     <!-- Actions -->
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
+                        <label class="flex items-center gap-2 cursor-pointer bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm select-none" title="Use AI for smarter parsing (slower)">
+                            <input type="checkbox" id="useAiParser" class="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500">
+                            <span class="text-xs font-bold text-teal-700"><i class="fas fa-magic mr-1"></i> AI Import</span>
+                        </label>
+
                         <input type="file" id="resumeUpload" class="hidden" accept=".pdf,.docx" onchange="uploadResume()">
                         <button id="btn-import" onclick="document.getElementById('resumeUpload').click()" class="hidden text-slate-600 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors items-center gap-2">
                             <i class="fas fa-file-upload text-teal-600"></i> Import
@@ -100,12 +105,39 @@
                     <!-- Content Mode -->
                     <div id="editor-mode-content" class="flex-grow flex flex-col relative h-full">
                         <div class="absolute top-4 right-6 z-10">
-                            <div class="bg-slate-100 p-1 rounded-lg flex text-xs font-bold border border-slate-200 shadow-sm">
+                            <div class="bg-slate-100 p-1 rounded-lg flex text-xs font-bold border border-slate-200 shadow-sm items-center">
                                 <button onclick="toggleFormat('text')" id="btn-fmt-text" class="px-3 py-1.5 rounded-md bg-white text-teal-700 shadow-sm transition-all">Text</button>
                                 <button onclick="toggleFormat('yaml')" id="btn-fmt-yaml" class="px-3 py-1.5 rounded-md text-slate-500 hover:text-slate-700 transition-all">YAML</button>
+                                <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                                <button onclick="smartFormat()" id="btn-fmt-ai" class="px-3 py-1.5 rounded-md text-purple-600 hover:bg-purple-50 hover:text-purple-800 transition-all flex items-center gap-1" title="Smart Format with AI">
+                                    <i class="fas fa-magic"></i> <span class="hidden sm:inline">AI Fix</span>
+                                </button>
                             </div>
                         </div>
                         <textarea id="resumeEditor" class="flex-grow w-full p-6 font-mono text-sm leading-relaxed bg-transparent resize-none focus:outline-none text-slate-700" spellcheck="false" placeholder="Enter your resume content...">{{ resume_text }}</textarea>
+                        
+                        <!-- AI Chat Widget -->
+                        <div class="h-72 border-t border-slate-200 bg-slate-50 flex flex-col shrink-0">
+                            <div class="flex items-center justify-between p-2 px-4 bg-white border-b border-slate-100">
+                                <span class="text-xs font-bold text-slate-500 uppercase tracking-wider"><i class="fas fa-robot text-teal-600 mr-2"></i>AI Assistant</span>
+                            </div>
+                            <div id="aiChatHistory" class="flex-grow overflow-y-auto p-4 space-y-3 text-sm">
+                                <div class="flex gap-3">
+                                    <div class="w-6 h-6 rounded bg-teal-100 text-teal-600 flex items-center justify-center text-xs flex-shrink-0"><i class="fas fa-robot"></i></div>
+                                    <div class="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-slate-600">
+                                        Hi! I can help you update your resume. Try "Add a skill" or "Fix my summary".
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="p-3 bg-white border-t border-slate-200">
+                                <div class="flex gap-2">
+                                    <input type="text" id="aiChatInput" class="flex-grow px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-teal-500 focus:border-teal-500" placeholder="Type a command (e.g., 'Add Python to skills')..." onkeypress="handleChatEnter(event)">
+                                    <button onclick="sendAiChat()" id="btn-chat-send" class="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 transition-colors">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Design Mode (Former Style Tab) -->
@@ -764,6 +796,54 @@ async function toggleFormat(format) {
     }
 }
 
+async function smartFormat() {
+    const editor = document.getElementById('resumeEditor');
+    const text = editor.value;
+    const btn = document.getElementById('btn-fmt-ai');
+    const originalContent = btn.innerHTML;
+
+    // UI Loading
+    editor.disabled = true;
+    editor.style.opacity = '0.5';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    try {
+        const res = await fetch('/api/convert', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                text: text,
+                from: currentFormat,
+                to: currentFormat,
+                use_ai: true
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            editor.value = data.result;
+            // Trigger preview update
+            previewResume();
+            
+            // Success feedback
+            btn.innerHTML = '<i class="fas fa-check"></i>';
+            setTimeout(() => {
+                btn.innerHTML = originalContent;
+            }, 1500);
+        } else {
+            alert('AI Formatting failed: ' + data.message);
+            btn.innerHTML = originalContent;
+        }
+    } catch (e) {
+        alert('Network error during AI formatting');
+        btn.innerHTML = originalContent;
+    } finally {
+        editor.disabled = false;
+        editor.style.opacity = '1';
+    }
+}
+
 // Function removed (moved to top with state management)
 // See applyPreviewState and togglePreview above
 
@@ -824,6 +904,124 @@ function handlePreviewButton() {
     }
 }
 
+function handleChatEnter(e) {
+    if (e.key === 'Enter') {
+        sendAiChat();
+    }
+}
+
+async function sendAiChat() {
+    const input = document.getElementById('aiChatInput');
+    const history = document.getElementById('aiChatHistory');
+    const command = input.value.trim();
+    const btn = document.getElementById('btn-chat-send');
+    
+    if (!command) return;
+    
+    // User Message
+    const userMsg = document.createElement('div');
+    userMsg.className = "flex gap-3 justify-end";
+    userMsg.innerHTML = `
+        <div class="bg-teal-600 text-white p-2 rounded-lg shadow-sm text-left max-w-[85%]">
+            ${command}
+        </div>
+        <div class="w-6 h-6 rounded bg-slate-200 flex items-center justify-center text-xs flex-shrink-0 text-slate-500"><i class="fas fa-user"></i></div>
+    `;
+    history.appendChild(userMsg);
+    history.scrollTop = history.scrollHeight;
+    
+    input.value = '';
+    input.disabled = true;
+    btn.disabled = true;
+    
+    // Loading Message
+    const loadingMsg = document.createElement('div');
+    loadingMsg.className = "flex gap-3";
+    loadingMsg.id = "chat-loading";
+    loadingMsg.innerHTML = `
+        <div class="w-6 h-6 rounded bg-teal-100 text-teal-600 flex items-center justify-center text-xs flex-shrink-0"><i class="fas fa-robot"></i></div>
+        <div class="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-slate-600">
+            <i class="fas fa-spinner fa-spin mr-2"></i> Thinking...
+        </div>
+    `;
+    history.appendChild(loadingMsg);
+    history.scrollTop = history.scrollHeight;
+    
+    try {
+        const currentText = document.getElementById('resumeEditor').value;
+        // Use the global variable currentFormat directly
+        const formatToSend = (typeof currentFormat !== 'undefined') ? currentFormat : 'text';
+        
+        const res = await fetch('/api/chat_update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                command: command,
+                text: currentText,
+                format: formatToSend
+            })
+        });
+        
+        const data = await res.json();
+        
+        // Remove loading
+        document.getElementById('chat-loading').remove();
+        
+        if (data.status === 'success') {
+            let message = "Updated your resume!";
+            
+            if (data.action === 'update_template') {
+                message = data.message || "Updated the resume template design!";
+                // Do NOT update editor text for template changes
+            } else {
+                // Update Editor (default/data update)
+                document.getElementById('resumeEditor').value = data.text;
+            }
+            
+            // Bot Success Message
+            const botMsg = document.createElement('div');
+            botMsg.className = "flex gap-3";
+            botMsg.innerHTML = `
+                <div class="w-6 h-6 rounded bg-teal-100 text-teal-600 flex items-center justify-center text-xs flex-shrink-0"><i class="fas fa-robot"></i></div>
+                <div class="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-slate-600">
+                    <i class="fas fa-check-circle text-teal-500 mr-1"></i> ${message}
+                </div>
+            `;
+            history.appendChild(botMsg);
+            
+            // Refresh Preview
+            previewResume();
+        } else {
+             // Bot Error Message
+            const botMsg = document.createElement('div');
+            botMsg.className = "flex gap-3";
+            botMsg.innerHTML = `
+                <div class="w-6 h-6 rounded bg-red-100 text-red-600 flex items-center justify-center text-xs flex-shrink-0"><i class="fas fa-exclamation-triangle"></i></div>
+                <div class="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-slate-600">
+                    Sorry, something went wrong: ${data.message}
+                </div>
+            `;
+            history.appendChild(botMsg);
+        }
+    } catch (e) {
+        if(document.getElementById('chat-loading')) document.getElementById('chat-loading').remove();
+        const botMsg = document.createElement('div');
+        botMsg.className = "flex gap-3";
+        botMsg.innerHTML = `
+            <div class="w-6 h-6 rounded bg-red-100 text-red-600 flex items-center justify-center text-xs flex-shrink-0"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="bg-white p-2 rounded-lg border border-slate-100 shadow-sm text-slate-600">
+                Network error. Please try again.
+            </div>
+        `;
+        history.appendChild(botMsg);
+    } finally {
+        input.disabled = false;
+        btn.disabled = false;
+        input.focus();
+        history.scrollTop = history.scrollHeight;
+    }
+}
+
 // Auto-preview on load
 window.onload = function() {
      try {
@@ -866,6 +1064,10 @@ async function uploadResume() {
     const formData = new FormData();
     formData.append('file', file);
     
+    // Check for AI Parser Toggle
+    const useAi = document.getElementById('useAiParser').checked;
+    formData.append('use_ai', useAi);
+
     const btn = document.querySelector('button[onclick="document.getElementById(\'resumeUpload\').click()"]');
     const originalHTML = btn.innerHTML;
     
