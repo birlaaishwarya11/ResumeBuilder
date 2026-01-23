@@ -3,13 +3,13 @@ import os
 import shutil
 from werkzeug.security import generate_password_hash, check_password_hash
 
-DB_NAME = "users.db"
+DB_NAME = os.path.join("data", "users.db")
 DATA_DIR = "data"
 
 class UserManager:
     def __init__(self):
-        self._init_db()
         self._ensure_data_dir()
+        self._init_db()
 
     def _init_db(self):
         conn = sqlite3.connect(DB_NAME)
