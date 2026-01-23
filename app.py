@@ -16,7 +16,7 @@ from rag_agent import RagAgent
 from resume_extractor import extract_resume_content
 
 # from generate_resume import generate_pdf # Removed local generation
-from resume_parser import parse_text, to_text
+from resume_parser import ensure_resume_schema, parse_text, to_text
 from user_manager import UserManager
 
 app = Flask(__name__)
@@ -311,6 +311,7 @@ def preview_html():
             resume_path = os.path.join(user_dir, "resume.yaml")
             with open(resume_path, "r") as f:
                 data = yaml.safe_load(f)
+            data = ensure_resume_schema(data)
 
         # Render template
         from flask import render_template_string

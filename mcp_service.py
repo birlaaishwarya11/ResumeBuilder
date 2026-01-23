@@ -4,7 +4,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp_servers import ats_server, doc_server
 
 # Create an MCP server
-mcp = FastMCP("ResumeBuilder")
+mcp = FastMCP("ResumeBuilder", host="0.0.0.0", port=8000)
 
 
 @mcp.tool()

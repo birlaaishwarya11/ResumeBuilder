@@ -97,12 +97,46 @@ def to_text(data):
     return "\n".join(lines)
 
 
+def ensure_resume_schema(data):
+    """Ensures the resume data has all required fields."""
+    if not isinstance(data, dict):
+        data = {}
+
+    defaults = {
+        "name": "Your Name",
+        "contact": {
+            "location": "",
+            "phone": "",
+            "email": "",
+            "linkedin": "",
+            "portfolio_url": "",
+            "portfolio_label": ""
+        },
+        "education": [],
+        "technical_skills": [],
+        "experience": [],
+        "projects": [],
+        "extracurricular": {"bullets": [], "research_papers": []}
+    }
+
+    # Deep merge defaults
+    for key, value in defaults.items():
+        if key not in data:
+            data[key] = value
+        elif isinstance(value, dict) and isinstance(data[key], dict):
+            for subkey, subvalue in value.items():
+                if subkey not in data[key]:
+                    data[key][subkey] = subvalue
+    
+    return data
+
 def parse_text(text):
     data = {}
     current_section = None
     current_item = None  # For list items (edu, exp, proj)
 
     lines = text.split("\n")
+
 
     for line in lines:
         line = line.strip()
@@ -225,7 +259,7 @@ def parse_text(text):
                         current_item["bullets"] = []
                     current_item["bullets"].append(line)
 
-    return data
+    return ensure_resume_schema(data)
 
 
 if __name__ == "__main__":
