@@ -53,6 +53,7 @@ def to_text(data):
                 if 'institution' in item: title = item['institution']
                 elif 'company' in item: title = item['company']
                 elif 'name' in item: title = item['name']
+                elif 'title' in item: title = item['title'] # Added title check
                 elif 'category' in item: # Skills
                      lines.append(f"- {item['category']}: {item['skills']}")
                      continue
@@ -62,7 +63,7 @@ def to_text(data):
                 
                 # Fields
                 for k, v in item.items():
-                    if k not in ['institution', 'company', 'name', 'bullets', 'category', 'skills']:
+                    if k not in ['institution', 'company', 'name', 'title', 'bullets', 'category', 'skills']: # Added title to ignore list
                         lines.append(f"{k.replace('_', ' ').capitalize()}: {v}")
                 
                 # Bullets
