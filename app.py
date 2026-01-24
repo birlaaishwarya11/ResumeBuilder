@@ -9,14 +9,14 @@ from ai_ats_checker import AIATSAnalyzer
 from generate_resume import generate_pdf # Local generation fallback
 from resume_parser import to_text, parse_text
 from resume_extractor import extract_resume_content # Local extraction fallback
-from daytona_orchestrator import DaytonaOrchestrator
-from ai_generator import AIGenerator
+# from daytona_orchestrator import DaytonaOrchestrator
+# from ai_generator import AIGenerator
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 # Initialize Daytona Orchestrator
-orchestrator = DaytonaOrchestrator()
-ai_gen = AIGenerator()
+# orchestrator = DaytonaOrchestrator()
+# ai_gen = AIGenerator()
 
 app.config["SECRET_KEY"] = "super-secret-key-change-in-production"
 
@@ -24,8 +24,8 @@ app.config["SECRET_KEY"] = "super-secret-key-change-in-production"
 def health():
     status = {
         "status": "ok",
-        "daytona": "connected" if orchestrator.daytona else "disconnected",
-        "api_key_set": bool(orchestrator.api_key)
+        "daytona": "disconnected", # orchestrator.daytona if orchestrator.daytona else "disconnected",
+        "api_key_set": False # bool(orchestrator.api_key)
     }
     return jsonify(status)
 
@@ -92,8 +92,8 @@ def stash_jd():
 @app.route('/api/upload_resume', methods=['POST'])
 @login_required
 def upload_resume():
-    if not orchestrator.daytona:
-         return jsonify({"error": "Daytona SDK not connected. Check server logs."}), 503
+    # if not orchestrator.daytona:
+    #      return jsonify({"error": "Daytona SDK not connected. Check server logs."}), 503
 
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -113,45 +113,45 @@ def upload_resume():
             file_content = f.read()
         
         extracted_text = ""
-        if orchestrator.daytona:
-            try:
-                # Extract content via Worker Sandbox
-                extracted_text = orchestrator.parse_resume(file.filename, file_content)
-            except Exception as e:
-                print(f"Orchestrator failed, falling back to local: {e}")
-                extracted_text = extract_resume_content(save_path)
-        else:
-            print("Daytona not connected, using local extraction.")
-            extracted_text = extract_resume_content(save_path)
+        # if orchestrator.daytona:
+        #     try:
+        #         # Extract content via Worker Sandbox
+        #         extracted_text = orchestrator.parse_resume(file.filename, file_content)
+        #     except Exception as e:
+        #         print(f"Orchestrator failed, falling back to local: {e}")
+        #         extracted_text = extract_resume_content(save_path)
+        # else:
+        print("Using local extraction.")
+        extracted_text = extract_resume_content(save_path)
 
         if extracted_text.startswith("# Error"):
              return jsonify({"error": extracted_text}), 500
             
-        # Update resume.yaml and Generate HTML via AI
-        try:
-            print("Starting AI Parsing & Generation...")
-            parsed_data = ai_gen.parse_resume(extracted_text)
+        # Update resume.yaml
+        # try:
+        #     print("Starting AI Parsing & Generation...")
+        #     parsed_data = ai_gen.parse_resume(extracted_text)
             
-            # Save YAML
-            resume_path = os.path.join(user_dir, "resume.yaml")
-            with open(resume_path, 'w') as f:
-                yaml.dump(parsed_data, f, sort_keys=False)
+        #     # Save YAML
+        #     resume_path = os.path.join(user_dir, "resume.yaml")
+        #     with open(resume_path, 'w') as f:
+        #         yaml.dump(parsed_data, f, sort_keys=False)
                 
-            # Generate and Save HTML Template
-            print("Generating HTML Template...")
-            html_template = ai_gen.generate_html_template(parsed_data)
-            template_path = os.path.join(app.root_path, 'templates', 'resume.html')
-            with open(template_path, 'w') as f:
-                f.write(html_template)
+        #     # Generate and Save HTML Template
+        #     print("Generating HTML Template...")
+        #     html_template = ai_gen.generate_html_template(parsed_data)
+        #     template_path = os.path.join(app.root_path, 'templates', 'resume.html')
+        #     with open(template_path, 'w') as f:
+        #         f.write(html_template)
                 
-        except Exception as e:
-            print(f"AI Processing failed: {e}")
-            # Fallback to regex parsing if AI fails
-            print("Falling back to regex parsing...")
-            parsed_data = parse_text(extracted_text)
-            resume_path = os.path.join(user_dir, "resume.yaml")
-            with open(resume_path, 'w') as f:
-                yaml.dump(parsed_data, f, sort_keys=False)
+        # except Exception as e:
+        #     print(f"AI Processing failed: {e}")
+        #     # Fallback to regex parsing if AI fails
+        #     print("Falling back to regex parsing...")
+        parsed_data = parse_text(extracted_text)
+        resume_path = os.path.join(user_dir, "resume.yaml")
+        with open(resume_path, 'w') as f:
+            yaml.dump(parsed_data, f, sort_keys=False)
                 
         return jsonify({"status": "success", "text": extracted_text})
             
@@ -268,17 +268,17 @@ def analyze_ats():
         return jsonify({"status": "error", "message": "Missing resume text or job description"}), 400
         
     # Run ATS Analysis via Worker Sandbox or Local
-    if orchestrator.daytona:
-        try:
-            result = orchestrator.analyze_ats(resume_text, job_desc)
-        except Exception as e:
-            print(f"Orchestrator failed, falling back to local: {e}")
-            from ats_analyzer import analyze_keywords
-            result = analyze_keywords(resume_text, job_desc)
-    else:
-        print("Daytona not connected, using local ATS analysis.")
-        from ats_analyzer import analyze_keywords
-        result = analyze_keywords(resume_text, job_desc)
+    # if orchestrator.daytona:
+    #     try:
+    #         result = orchestrator.analyze_ats(resume_text, job_desc)
+    #     except Exception as e:
+    #         print(f"Orchestrator failed, falling back to local: {e}")
+    #         from ats_analyzer import analyze_keywords
+    #         result = analyze_keywords(resume_text, job_desc)
+    # else:
+    print("Using local ATS analysis.")
+    from ats_analyzer import analyze_keywords
+    result = analyze_keywords(resume_text, job_desc)
         
     return jsonify({"status": "success", "analysis": result})
 
@@ -322,17 +322,17 @@ def generate():
                 style = json.load(f)
             
         # Generate via Worker Sandbox or Local Fallback
-        if orchestrator.daytona:
-            try:
-                 pdf_content = orchestrator.generate_pdf(data)
-                 with open(output_path, 'wb') as f:
-                    f.write(pdf_content)
-            except Exception as e:
-                print(f"Orchestrator failed, falling back to local: {e}")
-                generate_pdf(data, output_path, template_dir='templates', style=style)
-        else:
-             print("Daytona not connected, using local PDF generation.")
-             generate_pdf(data, output_path, template_dir='templates', style=style)
+        # if orchestrator.daytona:
+        #     try:
+        #          pdf_content = orchestrator.generate_pdf(data)
+        #          with open(output_path, 'wb') as f:
+        #             f.write(pdf_content)
+        #     except Exception as e:
+        #         print(f"Orchestrator failed, falling back to local: {e}")
+        #         generate_pdf(data, output_path, template_dir='templates', style=style)
+        # else:
+        print("Using local PDF generation.")
+        generate_pdf(data, output_path, template_dir='templates', style=style)
         
         # Save the returned PDF content
         # with open(output_path, 'wb') as f:
