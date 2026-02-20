@@ -1,0 +1,97 @@
+name: Aishwarya Birla
+contact:
+  location: New York, NY
+  phone: +1 646-244-9594
+  email: ab3347@cornell.edu
+  github: https://github.com/birlaaishwarya11
+  linkedin: https://www.linkedin.com/in/aishwarya-birla/
+  portfolio_label: Portfolio
+  portfolio_url: '#'
+summary: Software Engineer with 3+ years building scalable backend systems and cloud infrastructure at ThoughtWorks. Skilled at designing microservices architectures, APIs, and automated deployment pipelines—reducing deployment cycles by 60% while maintaining 99.9% uptime. Strong communicator who translates business requirements into technical solutions while collaborating across engineering, product, and operations teams. Currently pursuing MEng at Cornell Tech with 3.9 GPA.
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+- institution: SRM Institute of Science & Technology
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: Backend Development
+  skills: Python, Java, Node.js, TypeScript, Spring Boot, FastAPI, RESTful APIs, GraphQL, Microservices Architecture
+- category: Cloud & Infrastructure
+  skills: AWS, Azure, Docker, Kubernetes, Terraform, Infrastructure as Code (IaC)
+- category: Databases & Storage
+  skills: PostgreSQL, MongoDB, Redis, MySQL, Supabase, Database Design
+- category: DevOps & Automation
+  skills: GitLab CI/CD, GitHub Actions, Azure DevOps, Helm, Ansible, Bash Scripting, Python Automation
+- category: Monitoring & Tools
+  skills: Prometheus, Grafana, Git, Agile/Scrum, Test-Driven Development (TDD), Code Review
+
+experience:
+- company: ThoughtWorks
+  role: Software Engineer
+  location: Pune, India
+  date: July 2022 - May 2025
+  bullets:
+  - Designed and implemented scalable backend services and RESTful APIs using Java and Node.js, supporting high-throughput transaction processing for enterprise banking clients with 99.9% uptime and sub-100ms response times
+  - Built automated CI/CD pipelines and Infrastructure-as-Code workflows using GitLab CI/CD, Terraform, and Kubernetes, reducing deployment cycles by 60% and enabling daily production releases with automated testing and validation
+  - Developed round-robin resource scheduling algorithm for automated environment provisioning system, optimizing infrastructure utilization by 35% and ensuring consistent sub-5-minute allocation SLA for on-demand development environments
+  - Engineered Infrastructure Drift Detection system with continuous monitoring and automated alerting, preventing unauthorized configuration changes and maintaining compliance with security policies across enterprise infrastructure
+  - Led migration of 40+ microservices from raw Kubernetes manifests to standardized Helm charts, creating reusable infrastructure templates that reduced deployment complexity, eliminated configuration errors, and accelerated new service onboarding
+  - Implemented comprehensive observability stack using Prometheus and Grafana with custom dashboards and alert rules, reducing mean time to detection (MTTD) by 50% and enabling proactive incident response for production services
+  - Optimized cloud resource costs by 20% through automated cost analysis, rightsizing recommendations, and infrastructure lifecycle management across Azure environments serving thousands of concurrent users
+  - Executed high-stakes production migrations including Terraform state transitions and zero-downtime Azure subscription transfers, maintaining 100% service availability for mission-critical banking applications
+  - Collaborated directly with product managers and business stakeholders to translate strategic objectives into technical roadmaps, ensuring alignment between engineering execution and business goals across three concurrent client projects
+  - Mentored junior developers on backend best practices, code quality standards, and infrastructure automation, conducting regular code reviews and pair programming sessions to maintain high engineering standards
+
+- company: ThoughtWorks
+  role: Graduate Software Engineer
+  location: Pune, India
+  date: March 2022 - June 2022
+  bullets:
+  - Delivered full-stack features using Agile methodologies and Test-Driven Development (TDD) practices, achieving high code coverage and collaborating across cross-functional teams in fast-paced sprint cycles
+  - Implemented automated testing frameworks and deployment workflows, reducing manual testing effort and accelerating release velocity through comprehensive unit, integration, and end-to-end test suites
+projects:
+- name: Pitchbox (Full-Stack Demo Automation Platform)
+  event: Daytona Hack Sprint NYC
+  award: 2nd Prize & Best Use of Daytona
+  date: Oct 2025
+  bullets:
+  - Engineered full-stack automated demo platform using Next.js and Node.js, capturing real-time UI interactions and synchronizing them with AI-generated voiceovers from ElevenLabs API to produce marketing videos
+  - Built headless browser automation backend using Puppeteer to orchestrate Chromium instances, capturing UI frames and piping raw video data into FFmpeg for H.264 encoding with configurable quality and bitrate settings
+  - Designed unified storage architecture using Tigris as S3-compatible object store for video blobs and transactional database for session metadata, ensuring ACID compliance and enabling fast retrieval for end-user dashboard
+  - Orchestrated ephemeral sandbox environments using Daytona SDK, enabling automated provisioning and cleanup of isolated development environments for concurrent video rendering sessions
+
+- name: Dan.ai (Multilingual AI Assistant Backend)
+  event: NYC AI Agents Hackathon
+  award: Best Use of TrueFoundry
+  date: Sept 2025
+  bullets:
+  - Built production-grade FastAPI backend processing multilingual audio input through speech-to-text pipeline, achieving 95% intent recognition accuracy for non-native English speakers accessing healthcare services
+  - Designed agentic workflow using OpenHands framework to parse unstructured voice transcriptions into validated, structured JSON for CRM backend integration, enabling seamless appointment scheduling automation
+  - Deployed scalable RESTful endpoints on TrueFoundry cloud platform with health checks, auto-scaling policies, and circuit breakers, achieving sub-second response times for real-time user interactions
+  - Implemented security layers including input sanitization, prompt injection prevention, and encrypted data transmission to protect sensitive healthcare information in production environment
+
+- name: FirePath (Financial Forecasting Engine)
+  date: Dec 2025
+  bullets:
+  - Developed Monte Carlo simulation backend engine processing user income, expenses, and savings rates to forecast wealth accumulation trajectories over 30-year horizons with inflation indexing and variable market returns
+  - Built AI-driven financial advisory system using Claude LLM to analyze spending patterns from transaction data, identifying discretionary spending leakage and providing personalized FIRE milestone recommendations
+  - Implemented secure backend using Supabase PostgreSQL for encrypted user financial profiles, historical spending trends, and goal tracking, with row-level security policies ensuring data isolation
+  - Created dynamic scenario testing API enabling users to manipulate retirement age, withdrawal rates, and asset allocation parameters with real-time recalculation of wealth projections
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for the Techno-Management fest AARUUSH.
+  - Organized multiple events with student-led NGO Blooming Beacon.
+  - Contributed to digital communications for the international club ROTARACT-NYF.
+  research_papers:
+  - title: Developed blockchain-based smart contracts to secure and automate financial
+      transactions for vehicle rentals, improving trust and efficiency.
+    date: (Jul 2021 - Dec 2021)
+  - title: Compared machine learning algorithms to identify food items from images,
+      optimizing performance and accuracy for real-world use.
+    date: (Jan 2022 - May 2022)

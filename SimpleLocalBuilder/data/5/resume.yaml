@@ -1,0 +1,121 @@
+name: AISHWARYA BIRLA
+contact:
+  location: New York, NY
+  phone: +1 646-244-9594
+  email: ab3347@cornell.edu
+  github: ''
+  linkedin: ''
+  portfolio_label: Portfolio
+  portfolio_url: ''
+summary: Full-stack Software Engineer with 3+ years building production AI systems
+  and scalable web applications. Demonstrated experience in LLM orchestration, agentic
+  workflows, and data pipelines—combining Python backend development with React/TypeScript
+  frontends to create seamless user experiences. Currently pursuing MEng at Cornell
+  Tech with 3.9 GPA.
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+  coursework: Machine Learning Engineering, Deep Learning
+- institution: SRM Institute of Science & Technology
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: LLM & AI Applications
+  skills: LLM Orchestration (Claude, GPT-4), Agentic Workflows (OpenHands, PhenoML),
+    Prompt Engineering
+- category: Backend Development
+  skills: Python, Flask, FastAPI, RESTful APIs, Asynchronous Processing, Data Pipelines,
+    ETL, Performance Optimization
+- category: Databases & Data
+  skills: PostgreSQL, SQL Query Optimization, Supabase, MongoDB, Redis, Database Design,
+    ORMs
+- category: ML & Generative AI
+  skills: PyTorch, TensorFlow, Diffusion Models, Model Evaluation
+experience:
+- company: ThoughtWorks
+  role: ML Infrastructure Engineer
+  location: Pune, India
+  date: July 2022 - May 2025
+  bullets:
+  - Designed and implemented scalable backend services using Python and Java with
+    PostgreSQL databases, handling high-throughput requests with 99.9% uptime
+  - Built full-stack web applications with React/TypeScript frontends and Python backends
+  - Engineered data pipelines and ETL processes processing complex data for enterprise
+    banking and finance clients
+  - Developed RESTful APIs with asynchronous processing capabilities, optimizing performance
+    for data-intensive operations
+  - Implemented comprehensive monitoring and alerting infrastructure, proactively
+    detecting issues and reducing MTTR by 50%
+  - Built CI/CD pipelines automating deployment workflows, reducing deployment time
+    by 60% with automated testing and validation
+  - Collaborated with product teams to translate user requirements into technical
+    solutions, ensuring features solved client needs
+- company: ThoughtWorks
+  role: Graduate Software Engineer
+  location: Pune, India
+  date: March 2022 - June 2022
+  bullets:
+  - Delivered features using Agile and Test-Driven Development practices with cross-functional
+    teams
+  - Implemented automated testing frameworks and CI/CD workflows, accelerating release
+    cycles
+projects:
+- name: MiniTorch (ML Framework from Scratch)
+  event: Academic Project - Cornell Tech
+  date: Aug-Dec 2025
+  bullets:
+  - Implemented production-grade Automatic Differentiation engine with scalar and
+    tensor operations from scratch
+  - Built computational graph using topological sorting for backpropagation through
+    complex nested functions
+  - Engineered custom CUDA kernels using Numba JIT compilation to parallelize matrix
+    operations, bypassing Python GIL
+  - Developed N-dimensional tensor library with manual indexing, striding, and broadcasting
+    rules for vectorized operations
+  - Validated mathematical correctness using Property-Based Testing (Hypothesis),
+    ensuring derivative accuracy across float64 tensors
+  - Optimized performance-critical kernels for element-wise operations, reductions,
+    and matrix multiplications
+- name: SeeMeThru (Hybrid AI Pipeline)
+  event: NexHacks CMU Hackathon
+  award: 3rd Prize - Best Use of Overshoot
+  date: Jan 2026
+  bullets:
+  - Architected pipeline combining rule-based routing with LLM-powered semantic compression
+  - Built real-time video-to-text processing system reducing storage by 70% while
+    preserving critical context through intelligent summarization
+  - Designed data pipeline integrating ML inference with cloud messaging infrastructure
+    for instant notification delivery
+  - Implemented evaluation framework measuring LLM output quality and preventing hallucinations
+    in medical documentation context
+  - Deployed production system with FastAPI backend handling continuous video streams
+    and asynchronous LLM processing
+- name: CTCC (Data Pipeline & ML System)
+  event: Health in Climate Hackathon
+  date: Sept 2025
+  bullets:
+  - Engineered ETL pipeline aggregating and processing multiple large-scale datasets
+    (NIFC wildfire, CDC SVI, healthcare utilization data)
+  - Built composite risk scoring model using XGBoost with feature engineering optimizing
+    predictive accuracy
+  - Developed React/TypeScript dashboard with interactive data visualization enabling
+    users to query and analyze complex datasets
+  - Implemented data validation and quality checks ensuring high-fidelity inputs for
+    ML model training and inference
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for the Techno-Management fest AARUUSH.
+  - Organized multiple events with student-led NGO Blooming Beacon.
+  - Contributed to digital communications for the international club ROTARACT-NYF.
+  research_papers:
+  - title: Developed blockchain-based smart contracts to secure and automate financial
+      transactions for vehicle rentals, improving trust and efficiency.
+    date: (Jul 2021 - Dec 2021)
+  - title: Compared machine learning algorithms to identify food items from images,
+      optimizing performance and accuracy for real-world use.
+    date: (Jan 2022 - May 2022)

@@ -1,0 +1,1607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; display: flex; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .pane { width: 50%; height: 100%; display: flex; flex-direction: column; }
+        .left-pane { border-right: 1px solid #ccc; background: #f5f5f5; }
+        .right-pane { background: #fff; }
+
+        #editor { flex-grow: 1; font-size: 14px; }
+
+        .toolbar {
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .toolbar button {
+            padding: 6px 14px;
+            font-size: 0.8em;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+
+        .preview-container {
+            flex-grow: 1;
+            overflow: auto;
+            padding: 20px;
+            background: #525659;
+            display: flex;
+            justify-content: center;
+        }
+
+        #preview-frame {
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            min-height: 11in;
+            width: 8.5in;
+            border: none;
+            transform-origin: top center;
+            transition: transform 0.2s;
+        }
+
+        .controls {
+            padding: 10px;
+            background: #fff;
+            border-top: 1px solid #ccc;
+        }
+
+        button {
+            padding: 8px 15px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85em;
+            transition: background 0.15s, transform 0.1s;
+        }
+        button:hover { background: #0056b3; }
+        button:active { transform: scale(0.97); }
+
+        input[type="text"], input[type="color"], select {
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.85em;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, select:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(0,123,255,0.15);
+        }
+
+        /* --- Top Navigation Bar --- */
+        .top-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            background: #1a1a2e;
+            color: #eee;
+            height: 44px;
+            font-size: 0.85em;
+        }
+        .app-title {
+            font-weight: 700;
+            font-size: 1em;
+            color: #fff;
+            letter-spacing: 0.02em;
+        }
+        .user-menu-wrapper { position: relative; }
+        .user-menu-trigger {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #eee;
+            padding: 4px 10px 4px 4px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.15s;
+        }
+        .user-menu-trigger:hover { background: rgba(255,255,255,0.1); }
+        .user-avatar {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85em;
+            text-transform: uppercase;
+        }
+        .user-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dropdown-arrow { font-size: 0.7em; opacity: 0.7; }
+        .user-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+            min-width: 240px;
+            z-index: 2000;
+            overflow: hidden;
+            color: #333;
+        }
+        .user-dropdown.open { display: block; }
+        .dropdown-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid #eee;
+        }
+        .dropdown-header strong { font-size: 0.95em; }
+        .dropdown-email { font-size: 0.8em; color: #888; margin-top: 2px; }
+        .dropdown-divider { height: 1px; background: #eee; }
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            color: #333;
+            text-decoration: none;
+            font-size: 0.88em;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .dropdown-item:hover { background: #f5f5f5; }
+        .dropdown-item .di-icon {
+            width: 20px;
+            text-align: center;
+            font-size: 1.1em;
+        }
+        .dropdown-item.danger { color: #dc3545; }
+        .dropdown-item.danger:hover { background: #fff5f5; }
+
+        /* --- Side Panels --- */
+        .side-panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 380px;
+            background: white;
+            box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .side-panel.open { transform: translateX(0); }
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 1;
+        }
+        .panel-header h3 { margin: 0; font-size: 1.05em; }
+        .panel-close {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            color: #666;
+            transition: background 0.15s;
+            background: transparent !important;
+            border: none;
+            padding: 0;
+        }
+        .panel-close:hover { background: #f0f0f0 !important; color: #333; }
+        .panel-body { padding: 16px 20px; flex: 1; }
+
+        .history-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            border-radius: 6px;
+            margin-bottom: 4px;
+        }
+        .history-item:hover { background: #f9f9f9; }
+        .history-timestamp { font-size: 0.8em; color: #666; }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* --- Toast Notifications --- */
+        #toast-container {
+            position: fixed;
+            top: 54px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            padding: 12px 18px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.88em;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            animation: toast-in 0.3s ease-out;
+            max-width: 360px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toast-success { background: #27ae60; }
+        .toast-error { background: #e74c3c; }
+        .toast-info { background: #3498db; }
+        .toast.fade-out { animation: toast-out 0.3s ease-in forwards; }
+        @keyframes toast-in { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toast-out { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(60px); } }
+
+        .upload-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            gap: 20px;
+        }
+        .upload-overlay h2 { color: #333; margin-bottom: 0; }
+        .upload-overlay p { color: #666; max-width: 400px; text-align: center; }
+        .upload-box {
+            border: 2px dashed #007bff;
+            border-radius: 12px;
+            padding: 40px 60px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .upload-box:hover { background: #f0f7ff; }
+        .upload-box input[type="file"] { display: none; }
+
+        /* --- Settings Panel Form --- */
+        .settings-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .settings-card-title {
+            font-size: 0.88em;
+            font-weight: 700;
+            color: #333;
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .settings-card label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.75em;
+            color: #666;
+            margin-top: 10px;
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+        .settings-card input[type="text"],
+        .settings-card select {
+            width: 100%;
+            padding: 7px 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.88em;
+            background: #fff;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0 12px;
+        }
+        .settings-card p.hint {
+            font-size: 0.78em;
+            color: #999;
+            margin: 0 0 8px 0;
+        }
+        .panel-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #eee;
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+        }
+
+        /* --- Custom Section Items --- */
+        .custom-section-item {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+        .custom-section-item .cs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .custom-section-item .cs-header strong { font-size: 0.88em; }
+        .cs-remove-btn {
+            background: transparent;
+            color: #dc3545;
+            border: 1px solid #dc3545;
+            padding: 2px 10px;
+            font-size: 0.72em;
+            border-radius: 4px;
+        }
+        .cs-remove-btn:hover { background: #dc3545; color: #fff; }
+        .cs-field { margin-bottom: 6px; }
+        .cs-field label {
+            font-size: 0.7em;
+            text-transform: uppercase;
+            color: #888;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            margin-bottom: 2px;
+            display: block;
+        }
+        .cs-field input, .cs-field select {
+            width: 100%;
+            padding: 5px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Toast Container -->
+<div id="toast-container"></div>
+
+<!-- Top Navigation Bar -->
+<div style="position:fixed; top:0; left:0; right:0; z-index:500;">
+    <div class="top-nav">
+        <span class="app-title">Resume Builder</span>
+        <div class="user-menu-wrapper">
+            <button class="user-menu-trigger" onclick="toggleUserMenu()">
+                <span class="user-avatar">{{ user.name[0] if user.name else '?' }}</span>
+                <span class="user-name">{{ user.name }}</span>
+                <span class="dropdown-arrow">&#9662;</span>
+            </button>
+            <div class="user-dropdown" id="user-dropdown">
+                <div class="dropdown-header">
+                    <strong>{{ user.name }}</strong>
+                    <div class="dropdown-email">{{ user.email }}</div>
+                </div>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item" href="#" onclick="event.preventDefault(); toggleUserMenu(); toggleSettings();">
+                    <span class="di-icon">&#9881;</span> Settings
+                </a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item danger" href="#" onclick="event.preventDefault(); handleLogout();">
+                    <span class="di-icon">&#8618;</span> Sign Out
+                </a>
+                <div class="dropdown-divider"></div>
+                <a class="dropdown-item danger" href="#" onclick="event.preventDefault(); toggleUserMenu(); showDeleteProfile();">
+                    <span class="di-icon">&#128465;</span> Delete Account
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="pane left-pane" style="margin-top: 44px;">
+    <div class="toolbar">
+        <input type="text" id="save-keyword" placeholder="Version keyword (e.g., 'tech')" style="border-radius:6px;">
+        <button onclick="saveResume()">Save Version</button>
+        <button onclick="toggleHistory()" style="background: #6c757d;">History</button>
+        <button onclick="toggleJDMatch()" style="background: #9b59b6;">JD Match</button>
+        <button onclick="downloadPDF()" style="background: #28a745;">Download PDF</button>
+    </div>
+    <div class="controls">
+        <details open>
+            <summary style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
+                <span><strong>Header (from Settings)</strong></span>
+                <div style="display:flex; gap:10px;">
+                    <span title="Check Grammar" onclick="event.preventDefault(); event.stopPropagation(); checkGrammar()" style="cursor:pointer; font-size:1.2em;">&#x1F4DD;</span>
+                    <span title="Live View" onclick="event.preventDefault(); event.stopPropagation(); openLiveView()" style="cursor:pointer; font-size:1.2em;">&#x1F441;&#xFE0F;</span>
+                    <span title="Toggle Wrap" onclick="event.preventDefault(); event.stopPropagation(); toggleWrap()" style="cursor:pointer; font-size:1.2em;">&#x21A9;&#xFE0F;</span>
+                </div>
+            </summary>
+            <div id="header-preview" style="background: #e9ecef; padding: 10px; border: 1px solid #ccc; font-size: 0.85em; font-family: monospace; color: #555; white-space: pre-wrap; margin-top:5px; border-radius:6px;"></div>
+        </details>
+
+        <details style="margin-top:10px;">
+            <summary>Styling Options</summary>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px 0;">
+                <label>Font: <select id="font-family" onchange="updatePreview()">
+                    <option value='"Times New Roman", Times, serif'>Times New Roman</option>
+                    <option value='Arial, sans-serif'>Arial</option>
+                    <option value='"Helvetica Neue", Helvetica, sans-serif'>Helvetica</option>
+                    <option value='Georgia, serif'>Georgia</option>
+                    <option value='Calibri, "Trebuchet MS", sans-serif'>Calibri</option>
+                    <option value='Garamond, "EB Garamond", serif'>Garamond</option>
+                    <option value='Cambria, Georgia, serif'>Cambria</option>
+                    <option value='"Courier New", Courier, monospace'>Courier New</option>
+                </select></label>
+                <label>Size: <input type="text" id="font-size" value="{{ style.font_size }}" onchange="updatePreview()"></label>
+                <label>Line Height: <input type="text" id="line-height" value="{{ style.line_height }}" onchange="updatePreview()"></label>
+                <label>Margin: <input type="text" id="margin" value="{{ style.margin }}" onchange="updatePreview()"></label>
+                <label>Accent Color: <input type="color" id="accent-color" value="{{ style.accent_color }}" onchange="updatePreview()"></label>
+            </div>
+        </details>
+    </div>
+
+
+    <div id="editor">{{ resume }}</div>
+</div>
+
+<!-- Live View Modal -->
+<div id="live-view-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+    <div style="background:white; width:90%; height:90%; display:flex; flex-direction:column; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
+        <div style="padding:10px; display:flex; justify-content:space-between; border-bottom:1px solid #ccc; align-items:center;">
+            <h3 style="margin:0;">Live PDF Preview</h3>
+            <span onclick="closeLiveView()" style="cursor:pointer; font-size:1.5em;">&times;</span>
+        </div>
+        <iframe id="live-view-frame" style="flex-grow:1; border:none; width:100%;"></iframe>
+    </div>
+</div>
+
+<!-- Grammar Check Modal -->
+<div id="grammar-check-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
+    <div style="background:white; width:600px; max-height:80%; display:flex; flex-direction:column; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
+        <div style="padding:15px; display:flex; justify-content:space-between; border-bottom:1px solid #ccc; align-items:center;">
+            <h3 style="margin:0;">Grammar & Spelling Check</h3>
+            <span onclick="closeGrammarCheck()" style="cursor:pointer; font-size:1.5em;">&times;</span>
+        </div>
+        <div id="grammar-results" style="padding:20px; overflow-y:auto; flex-grow:1;">
+            Loading...
+        </div>
+        <div style="padding:15px; border-top:1px solid #ccc; text-align:right;">
+            <button onclick="closeGrammarCheck()" style="background:#6c757d;">Close</button>
+        </div>
+    </div>
+</div>
+
+<div class="pane right-pane" style="margin-top: 44px;">
+    <div class="preview-container">
+        <iframe id="preview-frame"></iframe>
+    </div>
+</div>
+
+<!-- History Panel -->
+<div class="side-panel" id="history-panel">
+    <div class="panel-header">
+        <h3>Version History</h3>
+        <button class="panel-close" onclick="toggleHistory()">&times;</button>
+    </div>
+    <div class="panel-body" id="history-list">Loading...</div>
+</div>
+
+<!-- JD Match Panel -->
+<div class="side-panel" id="jd-match-panel" style="width: 420px;">
+    <div class="panel-header">
+        <h3>ATS Match Resume</h3>
+        <button class="panel-close" onclick="toggleJDMatch()">&times;</button>
+    </div>
+    <div class="panel-body">
+        <label style="display:block; margin-bottom:5px; font-size:0.85em; font-weight:600;">AI Provider</label>
+        <select id="ai-provider" onchange="updateProviderSettings()" style="width: 100%; margin-bottom: 10px; padding: 6px;">
+            <option value="anthropic">Claude (Anthropic)</option>
+            <option value="openai">ChatGPT (OpenAI)</option>
+            <option value="gemini">Gemini (Google)</option>
+        </select>
+
+        <label style="display:block; margin-bottom:5px; font-size:0.85em; font-weight:600;">Model</label>
+        <select id="ai-model" onchange="onModelChange()" style="width: 100%; margin-bottom: 10px; padding: 6px;">
+        </select>
+
+        <div id="custom-model-container" style="display:none; margin-bottom: 10px;">
+            <label style="display:block; margin-bottom:5px; font-size:0.85em; font-weight:600;">Custom Model Name</label>
+            <input type="text" id="custom-model-name" placeholder="e.g. gpt-4-32k" onchange="onCustomModelChange()" style="width: 100%; padding: 6px;">
+        </div>
+
+        <label style="display:block; margin-bottom:5px; font-size:0.85em; font-weight:600;">API Key</label>
+        <input type="password" id="ai-api-key" placeholder="sk-ant-..." style="width: 100%; margin-bottom: 10px; padding: 6px; border: 1px solid #ddd; border-radius: 6px;">
+
+        <label style="display:block; margin-bottom:5px; font-size:0.85em; font-weight:600;">Job Description</label>
+        <textarea id="jd-text" rows="10" placeholder="Paste Job Description here..." style="width: 100%; resize: vertical; padding: 6px; border: 1px solid #ddd; border-radius: 6px;"></textarea>
+
+        <button onclick="analyzeCurrentResume()" style="width: 100%; margin-top: 10px; background: #28a745;">Check Current Resume Score</button>
+        <button onclick="analyzeJD()" style="width: 100%; margin-top: 10px; background: #6c757d;">Analyze Saved Versions</button>
+
+        <div id="match-results" style="margin-top: 20px;"></div>
+    </div>
+</div>
+
+<!-- Settings Panel -->
+<div class="side-panel" id="settings-panel" style="width: 420px;">
+    <div class="panel-header">
+        <h3>Settings</h3>
+        <button class="panel-close" onclick="toggleSettings()">&times;</button>
+    </div>
+    <div class="panel-body">
+        <!-- Header / Contact Card -->
+        <div class="settings-card">
+            <div class="settings-card-title">&#128100; Header / Contact Info</div>
+            <label>Full Name</label>
+            <input type="text" id="settings-name">
+            <div class="settings-grid">
+                <div>
+                    <label>Location</label>
+                    <input type="text" id="settings-location" placeholder="New York, NY">
+                </div>
+                <div>
+                    <label>Phone</label>
+                    <input type="text" id="settings-phone" placeholder="+1 555-123-4567">
+                </div>
+            </div>
+            <label>Email</label>
+            <input type="text" id="settings-email">
+            <div class="settings-grid">
+                <div>
+                    <label>GitHub URL</label>
+                    <input type="text" id="settings-github" placeholder="https://github.com/...">
+                </div>
+                <div>
+                    <label>LinkedIn URL</label>
+                    <input type="text" id="settings-linkedin" placeholder="https://linkedin.com/in/...">
+                </div>
+            </div>
+            <div class="settings-grid">
+                <div>
+                    <label>Portfolio Label</label>
+                    <input type="text" id="settings-portfolio-label" placeholder="Portfolio">
+                </div>
+                <div>
+                    <label>Portfolio URL</label>
+                    <input type="text" id="settings-portfolio-url" placeholder="https://yoursite.com">
+                </div>
+            </div>
+        </div>
+
+        <!-- Section Names Card -->
+        <div class="settings-card">
+            <div class="settings-card-title">&#128221; Section Names</div>
+            <p class="hint">Customize the titles displayed on your resume for each section.</p>
+            <label>Education</label>
+            <input type="text" id="section-education">
+            <label>Technical Skills</label>
+            <input type="text" id="section-technical_skills">
+            <label>Experience</label>
+            <input type="text" id="section-experience">
+            <label>Projects</label>
+            <input type="text" id="section-projects">
+            <label>Extracurricular</label>
+            <input type="text" id="section-extracurricular">
+        </div>
+
+        <!-- Custom Sections Card -->
+        <div class="settings-card">
+            <div class="settings-card-title">&#10010; Custom Sections</div>
+            <p class="hint">Add extra sections like Certifications, Publications, Awards, etc. Then add data under their YAML key in the editor.</p>
+            <div id="custom-sections-list"></div>
+            <button onclick="addCustomSection()" style="width:100%; margin-top:8px; background:#17a2b8; border-radius:6px;">+ Add Custom Section</button>
+        </div>
+    </div>
+    <div class="panel-footer">
+        <button onclick="saveSettings()" style="width:100%; background:#28a745; padding:10px; border-radius:6px; font-size:0.9em; font-weight:600;">Save Settings</button>
+    </div>
+</div>
+
+<script>
+    // --- Toast Notification System ---
+    function showToast(message, type) {
+        type = type || 'info';
+        var container = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        toast.className = 'toast toast-' + type;
+        var icons = { success: '&#10003;', error: '&#10007;', info: '&#8505;' };
+        toast.innerHTML = '<span>' + (icons[type] || '') + '</span> ' + message;
+        container.appendChild(toast);
+        setTimeout(function() {
+            toast.classList.add('fade-out');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3500);
+    }
+
+    // --- User Dropdown Menu ---
+    function toggleUserMenu() {
+        document.getElementById('user-dropdown').classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.user-menu-wrapper')) {
+            document.getElementById('user-dropdown').classList.remove('open');
+        }
+    });
+
+    // --- Editor Setup ---
+    var editor = ace.edit("editor");
+    editor.setTheme("ace/theme/chrome");
+    editor.session.setMode("ace/mode/yaml");
+    editor.setOptions({
+        fontSize: "14px",
+        showPrintMargin: false,
+        wrap: true,
+    });
+
+    // Current settings cache
+    var currentSettings = null;
+    var customSections = {{ custom_sections | tojson }};
+
+    // Set saved font family in dropdown
+    (function() {
+        var savedFont = {{ style.font_family | tojson }};
+        var fontSelect = document.getElementById('font-family');
+        for (var i = 0; i < fontSelect.options.length; i++) {
+            if (fontSelect.options[i].value === savedFont) {
+                fontSelect.selectedIndex = i;
+                break;
+            }
+        }
+    })();
+    var BUILTIN_KEYS = ['education', 'technical_skills', 'experience', 'projects', 'extracurricular', 'name', 'contact', 'summary'];
+
+    // --- Header Preview ---
+    function renderHeaderPreview() {
+        var el = document.getElementById('header-preview');
+        if (!currentSettings || !currentSettings.header) {
+            el.textContent = '(No header configured -- open Settings to set up)';
+            return;
+        }
+        var h = currentSettings.header;
+        var c = h.contact || {};
+        var text = 'name: ' + (h.name || '') + '\ncontact:';
+        if (c.location) text += '\n  location: ' + c.location;
+        if (c.phone) text += '\n  phone: ' + c.phone;
+        if (c.email) text += '\n  email: ' + c.email;
+        if (c.github) text += '\n  github: ' + c.github;
+        if (c.linkedin) text += '\n  linkedin: ' + c.linkedin;
+        if (c.portfolio_url) text += '\n  portfolio: ' + c.portfolio_url;
+        el.textContent = text;
+    }
+
+    // --- Settings ---
+    function loadSettings() {
+        fetch('/api/settings')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                currentSettings = data.settings;
+                customSections = data.settings.custom_sections || [];
+                renderHeaderPreview();
+                populateSettingsForm();
+                renderCustomSections();
+            }
+        });
+    }
+
+    function populateSettingsForm() {
+        if (!currentSettings) return;
+        var h = currentSettings.header || {};
+        var c = h.contact || {};
+        var s = currentSettings.section_names || {};
+
+        document.getElementById('settings-name').value = h.name || '';
+        document.getElementById('settings-location').value = c.location || '';
+        document.getElementById('settings-phone').value = c.phone || '';
+        document.getElementById('settings-email').value = c.email || '';
+        document.getElementById('settings-github').value = c.github || '';
+        document.getElementById('settings-linkedin').value = c.linkedin || '';
+        document.getElementById('settings-portfolio-label').value = c.portfolio_label || 'Portfolio';
+        document.getElementById('settings-portfolio-url').value = c.portfolio_url || '';
+
+        document.getElementById('section-education').value = s.education || 'EDUCATION';
+        document.getElementById('section-technical_skills').value = s.technical_skills || 'TECHNICAL SKILLS';
+        document.getElementById('section-experience').value = s.experience || 'PROFESSIONAL EXPERIENCE';
+        document.getElementById('section-projects').value = s.projects || 'PROJECTS AND HACKATHON HIGHLIGHTS';
+        document.getElementById('section-extracurricular').value = s.extracurricular || 'EXTRACURRICULAR ACTIVITIES';
+    }
+
+    // --- Custom Sections Management ---
+    function renderCustomSections() {
+        var container = document.getElementById('custom-sections-list');
+        container.innerHTML = '';
+        if (customSections.length === 0) {
+            container.innerHTML = '<div style="text-align:center; color:#aaa; font-size:0.85em; padding:12px 0;">No custom sections yet.</div>';
+            return;
+        }
+        customSections.forEach(function(cs, idx) {
+            var div = document.createElement('div');
+            div.className = 'custom-section-item';
+            div.innerHTML =
+                '<div class="cs-header">' +
+                    '<strong>' + (cs.display_name || cs.key) + '</strong>' +
+                    '<button class="cs-remove-btn" onclick="removeCustomSection(' + idx + ')">Remove</button>' +
+                '</div>' +
+                '<div class="cs-field">' +
+                    '<label>YAML Key</label>' +
+                    '<input type="text" value="' + cs.key + '" onchange="customSections[' + idx + '].key=this.value">' +
+                '</div>' +
+                '<div class="cs-field">' +
+                    '<label>Display Name</label>' +
+                    '<input type="text" value="' + cs.display_name + '" onchange="customSections[' + idx + '].display_name=this.value; this.closest(\'.custom-section-item\').querySelector(\'.cs-header strong\').textContent=this.value">' +
+                '</div>' +
+                '<div class="cs-field">' +
+                    '<label>Render Type</label>' +
+                    '<select onchange="customSections[' + idx + '].render_type=this.value">' +
+                        '<option value="bullets"' + (cs.render_type==='bullets'?' selected':'') + '>Bullets (simple list)</option>' +
+                        '<option value="entries"' + (cs.render_type==='entries'?' selected':'') + '>Entries (title/date + bullets)</option>' +
+                        '<option value="skills"' + (cs.render_type==='skills'?' selected':'') + '>Skills (category: items)</option>' +
+                    '</select>' +
+                '</div>';
+            container.appendChild(div);
+        });
+    }
+
+    function addCustomSection() {
+        var name = prompt("Section name (e.g., Certifications):");
+        if (!name || !name.trim()) return;
+        var key = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+        if (!key) { showToast('Invalid section name', 'error'); return; }
+        if (BUILTIN_KEYS.indexOf(key) !== -1) {
+            showToast('Cannot use "' + key + '" -- it conflicts with a built-in section.', 'error');
+            return;
+        }
+        if (customSections.some(function(cs) { return cs.key === key; })) {
+            showToast('A custom section with key "' + key + '" already exists.', 'error');
+            return;
+        }
+        customSections.push({
+            key: key,
+            display_name: name.trim().toUpperCase(),
+            render_type: 'bullets'
+        });
+        renderCustomSections();
+        showToast('Added custom section: ' + name.trim(), 'success');
+    }
+
+    function removeCustomSection(idx) {
+        if (!confirm('Remove custom section "' + customSections[idx].display_name + '"?')) return;
+        customSections.splice(idx, 1);
+        renderCustomSections();
+    }
+
+    function saveSettings() {
+        var header = {
+            name: document.getElementById('settings-name').value,
+            contact: {
+                location: document.getElementById('settings-location').value,
+                phone: document.getElementById('settings-phone').value,
+                email: document.getElementById('settings-email').value,
+                github: document.getElementById('settings-github').value,
+                linkedin: document.getElementById('settings-linkedin').value,
+                portfolio_label: document.getElementById('settings-portfolio-label').value,
+                portfolio_url: document.getElementById('settings-portfolio-url').value,
+            }
+        };
+        var section_names = {
+            education: document.getElementById('section-education').value,
+            technical_skills: document.getElementById('section-technical_skills').value,
+            experience: document.getElementById('section-experience').value,
+            projects: document.getElementById('section-projects').value,
+            extracurricular: document.getElementById('section-extracurricular').value,
+        };
+        // Include custom section display names in section_names
+        customSections.forEach(function(cs) {
+            section_names[cs.key] = cs.display_name;
+        });
+
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ header: header, section_names: section_names, custom_sections: customSections })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                currentSettings = { header: header, section_names: section_names, custom_sections: customSections };
+                renderHeaderPreview();
+                updatePreview();
+                showToast('Settings saved!', 'success');
+                document.getElementById('settings-panel').classList.remove('open');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        });
+    }
+
+    function toggleSettings() {
+        var panel = document.getElementById('settings-panel');
+        var wasOpen = panel.classList.contains('open');
+        closeAllPanels();
+        if (!wasOpen) {
+            panel.classList.add('open');
+            loadSettings();
+        }
+    }
+
+    function closeAllPanels() {
+        document.getElementById('history-panel').classList.remove('open');
+        document.getElementById('jd-match-panel').classList.remove('open');
+        document.getElementById('settings-panel').classList.remove('open');
+    }
+
+    // Upload removed — PDF upload only happens during onboarding
+
+    function handleLogout() {
+        // Clear all localStorage data before logging out
+        localStorage.removeItem('resume_autosave_content');
+        localStorage.removeItem('resume_autosave_keyword');
+        localStorage.removeItem('resume_autosave_jd');
+        localStorage.removeItem('selected_provider');
+        var providers = ['anthropic', 'openai', 'gemini'];
+        providers.forEach(function(p) {
+            localStorage.removeItem('api_key_' + p);
+            localStorage.removeItem('selected_model_' + p);
+            localStorage.removeItem('custom_model_name_' + p);
+        });
+        window.location.href = '/logout';
+    }
+
+    // --- Initial Load ---
+    loadSettings();
+    updatePreview();
+
+    // --- Auto-save ---
+    function saveStateToLocal() {
+        localStorage.setItem('resume_autosave_content', editor.getValue());
+        localStorage.setItem('resume_autosave_keyword', document.getElementById('save-keyword').value);
+    }
+
+    function restoreStateFromLocal() {
+        var savedContent = localStorage.getItem('resume_autosave_content');
+        var savedKeyword = localStorage.getItem('resume_autosave_keyword');
+
+        if (savedContent) {
+            editor.setValue(savedContent, -1);
+        }
+        if (savedKeyword) {
+            document.getElementById('save-keyword').value = savedKeyword;
+        }
+
+        var savedJD = localStorage.getItem('resume_autosave_jd');
+        if (savedJD) {
+            document.getElementById('jd-text').value = savedJD;
+        }
+    }
+
+    var timeout = null;
+    editor.session.on('change', function() {
+        saveStateToLocal();
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(updatePreview, 1000);
+    });
+
+    document.getElementById('save-keyword').addEventListener('input', saveStateToLocal);
+    document.getElementById('jd-text').addEventListener('input', function() {
+        localStorage.setItem('resume_autosave_jd', this.value);
+    });
+
+    window.addEventListener('DOMContentLoaded', function() {
+        restoreStateFromLocal();
+        loadProviderSettings();
+        renderCustomSections();
+    });
+
+    function getStyle() {
+        return {
+            font_family: document.getElementById('font-family').value,
+            font_size: document.getElementById('font-size').value,
+            line_height: document.getElementById('line-height').value,
+            margin: document.getElementById('margin').value,
+            accent_color: document.getElementById('accent-color').value
+        };
+    }
+
+    function updatePreview() {
+        var resumeYaml = editor.getValue();
+        var style = getStyle();
+
+        fetch('/api/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ resume: resumeYaml, style: style })
+        })
+        .then(function(response) { return response.text(); })
+        .then(function(html) {
+            var iframe = document.getElementById('preview-frame');
+            iframe.contentDocument.open();
+            iframe.contentDocument.write(html);
+            iframe.contentDocument.close();
+        })
+        .catch(function(err) { console.error(err); });
+    }
+
+    function saveResume() {
+        var resumeYaml = editor.getValue();
+        var keyword = document.getElementById('save-keyword').value || 'default';
+
+        fetch('/api/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ resume: resumeYaml, keyword: keyword })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            showToast(data.message, 'success');
+            loadHistory();
+        });
+    }
+
+    function openLiveView() {
+        var resumeYaml = editor.getValue();
+        var style = getStyle();
+        var keyword = document.getElementById('save-keyword').value;
+
+        fetch('/api/download_pdf', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ resume: resumeYaml, style: style, keyword: keyword, inline: true })
+        })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Failed to generate PDF');
+            return response.blob();
+        })
+        .then(function(blob) {
+            var url = window.URL.createObjectURL(blob);
+            var modal = document.getElementById('live-view-modal');
+            var iframe = document.getElementById('live-view-frame');
+            iframe.src = url;
+            modal.style.display = 'flex';
+        })
+        .catch(function(err) { console.error(err); });
+    }
+
+    function closeLiveView() {
+        var modal = document.getElementById('live-view-modal');
+        var iframe = document.getElementById('live-view-frame');
+        modal.style.display = 'none';
+        iframe.src = '';
+    }
+
+    function downloadPDF() {
+        var resumeYaml = editor.getValue();
+        var style = getStyle();
+        var keyword = document.getElementById('save-keyword').value;
+
+        fetch('/api/download_pdf', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ resume: resumeYaml, style: style, keyword: keyword })
+        })
+        .then(function(response) {
+            var contentDisposition = response.headers.get('Content-Disposition');
+            var filename = "resume.pdf";
+            if (contentDisposition) {
+                var filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (filenameMatch && filenameMatch.length === 2)
+                    filename = filenameMatch[1];
+            }
+            return response.blob().then(function(blob) { return { blob: blob, filename: filename }; });
+        })
+        .then(function(result) {
+            var url = window.URL.createObjectURL(result.blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = result.filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        });
+    }
+
+    function toggleHistory() {
+        var panel = document.getElementById('history-panel');
+        var wasOpen = panel.classList.contains('open');
+        closeAllPanels();
+        if (!wasOpen) {
+            panel.classList.add('open');
+            loadHistory();
+        }
+    }
+
+    function loadHistory() {
+        fetch('/api/history')
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            var list = document.getElementById('history-list');
+            list.innerHTML = '';
+            if (data.length === 0) {
+                list.innerHTML = '<div style="padding:10px; text-align:center; color:#999;">No saved versions found.</div>';
+                return;
+            }
+            data.forEach(function(item) {
+                var div = document.createElement('div');
+                div.className = 'history-item';
+
+                var displayName = item.filename;
+                var match = item.filename.match(/^(.+?)_(\d{8}_\d{6})\.yaml$/);
+                if (match) {
+                    displayName = match[1].replace(/_/g, ' ');
+                }
+
+                div.innerHTML =
+                    '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+                        '<strong>' + displayName + '</strong>' +
+                        '<div>' +
+                            '<button onclick="event.stopPropagation(); loadVersion(\'' + item.filename + '\')" style="padding:2px 6px; font-size:0.7em;">Restore</button>' +
+                            '<button onclick="event.stopPropagation(); deleteVersion(\'' + item.filename + '\')" style="padding:2px 6px; font-size:0.7em; background:#dc3545; margin-left:5px;">Delete</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="history-timestamp" style="font-size:0.75em; margin-top:2px;">' + item.timestamp + '</div>';
+                div.onclick = function() { loadVersion(item.filename); };
+                list.appendChild(div);
+            });
+        });
+    }
+
+    function deleteVersion(filename) {
+        if (!confirm('Are you sure you want to delete ' + filename + '?')) return;
+
+        fetch('/api/delete_version/' + filename, { method: 'DELETE' })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                loadHistory();
+                showToast('Version deleted.', 'info');
+            } else {
+                showToast(data.message, 'error');
+            }
+        });
+    }
+
+    function toggleJDMatch() {
+        var panel = document.getElementById('jd-match-panel');
+        var wasOpen = panel.classList.contains('open');
+        closeAllPanels();
+        if (!wasOpen) {
+            panel.classList.add('open');
+            loadProviderSettings();
+        }
+    }
+
+    var PROVIDER_MODELS = {
+        'anthropic': [
+            { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku (Fastest)' },
+            { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet (Balanced)' },
+            { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (Strongest)' },
+            { value: 'custom', label: 'Custom Model...' }
+        ],
+        'openai': [
+            { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (Fast)' },
+            { value: 'gpt-4', label: 'GPT-4 (Smart)' },
+            { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (New)' },
+            { value: 'gpt-4o', label: 'GPT-4o (Latest)' },
+            { value: 'custom', label: 'Custom Model...' }
+        ],
+        'gemini': [
+            { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite (Fast)' },
+            { value: 'gemini-pro', label: 'Gemini Pro' },
+            { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (Strongest)' },
+            { value: 'custom', label: 'Custom Model...' }
+        ]
+    };
+
+    function updateProviderSettings() {
+        var provider = document.getElementById('ai-provider').value;
+        var apiKeyInput = document.getElementById('ai-api-key');
+        var modelSelect = document.getElementById('ai-model');
+
+        if (provider === 'anthropic') apiKeyInput.placeholder = 'sk-ant-...';
+        else if (provider === 'openai') apiKeyInput.placeholder = 'sk-proj-...';
+        else if (provider === 'gemini') apiKeyInput.placeholder = 'AIzaSy...';
+
+        var savedKey = localStorage.getItem('api_key_' + provider);
+        if (savedKey) apiKeyInput.value = savedKey;
+        else apiKeyInput.value = '';
+
+        localStorage.setItem('selected_provider', provider);
+
+        var models = PROVIDER_MODELS[provider] || [];
+        modelSelect.innerHTML = '';
+        models.forEach(function(m) {
+            var option = document.createElement('option');
+            option.value = m.value;
+            option.textContent = m.label;
+            modelSelect.appendChild(option);
+        });
+
+        var savedModel = localStorage.getItem('selected_model_' + provider);
+        if (savedModel) {
+            if (models.some(function(m) { return m.value === savedModel; })) {
+                modelSelect.value = savedModel;
+            } else {
+                modelSelect.value = 'custom';
+            }
+        }
+        onModelChange();
+    }
+
+    function onModelChange() {
+        var provider = document.getElementById('ai-provider').value;
+        var model = document.getElementById('ai-model').value;
+        var customModelContainer = document.getElementById('custom-model-container');
+        var customModelInput = document.getElementById('custom-model-name');
+
+        if (model === 'custom') {
+            customModelContainer.style.display = 'block';
+            var savedCustomName = localStorage.getItem('custom_model_name_' + provider);
+            if (savedCustomName) customModelInput.value = savedCustomName;
+        } else {
+            customModelContainer.style.display = 'none';
+        }
+        localStorage.setItem('selected_model_' + provider, model);
+    }
+
+    function onCustomModelChange() {
+        var provider = document.getElementById('ai-provider').value;
+        var customName = document.getElementById('custom-model-name').value;
+        localStorage.setItem('custom_model_name_' + provider, customName);
+    }
+
+    function loadProviderSettings() {
+        var savedProvider = localStorage.getItem('selected_provider');
+        if (savedProvider) {
+            document.getElementById('ai-provider').value = savedProvider;
+        }
+        updateProviderSettings();
+    }
+
+    function analyzeCurrentResume() {
+        var resumeYaml = editor.getValue();
+        var jdText = document.getElementById('jd-text').value;
+        var apiKey = document.getElementById('ai-api-key').value;
+        var provider = document.getElementById('ai-provider').value;
+
+        if (!jdText || !apiKey) {
+            showToast("Please enter Job Description and API Key", 'error');
+            return;
+        }
+
+        var model = document.getElementById('ai-model').value;
+        if (model === 'custom') {
+            model = document.getElementById('custom-model-name').value;
+        }
+
+        localStorage.setItem('api_key_' + provider, apiKey);
+
+        var resultsDiv = document.getElementById('match-results');
+        resultsDiv.innerHTML = '<div style="text-align:center;">Analyzing... <div class="loader"></div></div>';
+
+        fetch('/api/analyze_resume', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resume: resumeYaml,
+                jd_text: jdText,
+                api_key: apiKey,
+                provider: provider,
+                model: model
+            })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.status === 'error') {
+                resultsDiv.innerHTML = '<div style="color:red">Error: ' + data.message + '</div>';
+                return;
+            }
+
+            var res = data.result;
+            var html =
+                '<div style="border: 1px solid #ccc; padding: 15px; border-radius: 5px; background: #f8f9fa;">' +
+                    '<div style="text-align: center; margin-bottom: 15px;">' +
+                        '<div style="font-size: 2.5em; font-weight: bold; color: ' + getScoreColor(res.score) + '">' + res.score + '/100</div>' +
+                        '<div style="font-size: 0.9em; color: #666;">ATS Compatibility Score</div>' +
+                    '</div>' +
+                    '<div style="margin-bottom: 15px;">' +
+                        '<strong>Missing Keywords:</strong>' +
+                        '<div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px;">' +
+                            res.missing_keywords.map(function(k) { return '<span style="background: #ffebee; color: #c62828; padding: 2px 8px; border-radius: 12px; font-size: 0.85em;">' + k + '</span>'; }).join('') +
+                        '</div>' +
+                    '</div>' +
+                    '<div>' +
+                        '<strong>Suggestions:</strong>' +
+                        '<ul style="margin-top: 5px; padding-left: 20px;">' +
+                            res.suggestions.map(function(s) { return '<li>' + s + '</li>'; }).join('') +
+                        '</ul>' +
+                    '</div>' +
+                '</div>';
+            resultsDiv.innerHTML = html;
+        })
+        .catch(function(err) {
+            resultsDiv.innerHTML = '<div style="color:red">Error: ' + err.message + '</div>';
+        });
+    }
+
+    function getScoreColor(score) {
+        if (score >= 80) return '#2ecc71';
+        if (score >= 60) return '#f39c12';
+        return '#e74c3c';
+    }
+
+    var currentMatchResults = [];
+    var renderedCount = 0;
+
+    function analyzeJD() {
+        var provider = document.getElementById('ai-provider').value;
+        var apiKey = document.getElementById('ai-api-key').value;
+        var jdText = document.getElementById('jd-text').value;
+        var resultsDiv = document.getElementById('match-results');
+
+        if (!apiKey) { showToast("Please enter your API Key", 'error'); return; }
+        if (!jdText) { showToast("Please paste the Job Description", 'error'); return; }
+
+        var model = document.getElementById('ai-model').value;
+        if (model === 'custom') {
+            model = document.getElementById('custom-model-name').value;
+        }
+
+        localStorage.setItem('api_key_' + provider, apiKey);
+
+        resultsDiv.innerHTML = '<div style="text-align:center;">Analyzing... (this may take a moment)</div>';
+        currentMatchResults = [];
+        renderedCount = 0;
+
+        fetch('/api/match_jd', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ jd_text: jdText, api_key: apiKey, provider: provider, model: model })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                currentMatchResults = data.results;
+                resultsDiv.innerHTML = '<h4>Match Results</h4><div id="results-list"></div><div id="load-more-container" style="text-align:center; margin-top:10px;"></div>';
+
+                if (currentMatchResults.length === 0) {
+                    resultsDiv.innerHTML += '<p>No matches found.</p>';
+                } else {
+                    showNextBatch();
+                }
+            } else {
+                resultsDiv.innerHTML = '<div style="color:red;">Error: ' + data.message + '</div>';
+            }
+        })
+        .catch(function(err) {
+            resultsDiv.innerHTML = '<div style="color:red;">Error: ' + err.message + '</div>';
+        });
+    }
+
+    function showNextBatch() {
+        var batchSize = 3;
+        var nextBatch = currentMatchResults.slice(renderedCount, renderedCount + batchSize);
+        if (nextBatch.length === 0) return;
+
+        var loadMoreContainer = document.getElementById('load-more-container');
+        var needsAnalysis = nextBatch.filter(function(r) { return !r.improvements || r.improvements.length === 0; });
+
+        if (needsAnalysis.length > 0) {
+            loadMoreContainer.innerHTML = '<span>Analyzing details for next batch...</span>';
+
+            var filenames = needsAnalysis.map(function(r) { return r.filename; });
+            var provider = document.getElementById('ai-provider').value;
+            var apiKey = document.getElementById('ai-api-key').value;
+            var jdText = document.getElementById('jd-text').value;
+            var model = document.getElementById('ai-model').value;
+            if (model === 'custom') model = document.getElementById('custom-model-name').value;
+
+            fetch('/api/analyze_selection', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ jd_text: jdText, api_key: apiKey, provider: provider, filenames: filenames, model: model })
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.status === 'success') {
+                    var detailsMap = {};
+                    data.results.forEach(function(d) { detailsMap[d.filename] = d; });
+                    nextBatch.forEach(function(r) {
+                        if (detailsMap[r.filename]) {
+                            r.reasoning = detailsMap[r.filename].reasoning;
+                            r.improvements = detailsMap[r.filename].improvements;
+                        }
+                    });
+                    renderBatch(nextBatch);
+                } else {
+                    renderBatch(nextBatch);
+                }
+            })
+            .catch(function() { renderBatch(nextBatch); });
+        } else {
+            renderBatch(nextBatch);
+        }
+    }
+
+    function renderBatch(batch) {
+        var container = document.getElementById('results-list');
+        var loadMoreContainer = document.getElementById('load-more-container');
+
+        batch.forEach(function(res) {
+            var improvementsHtml = '';
+            if (res.improvements && res.improvements.length > 0) {
+                improvementsHtml = '<ul style="font-size:0.85em; margin:5px 0; padding-left:20px; color:#444;">';
+                res.improvements.forEach(function(imp) {
+                    improvementsHtml += '<li>' + imp + '</li>';
+                });
+                improvementsHtml += '</ul>';
+            }
+
+            var itemHtml =
+                '<div class="history-item" style="cursor:default;">' +
+                    '<div style="display:flex; justify-content:space-between;">' +
+                        '<strong>' + res.filename.replace('.yaml', '') + '</strong>' +
+                        '<span style="background:' + getScoreColor(res.score) + '; color:white; padding:2px 6px; border-radius:4px; font-size:0.8em;">' + res.score + '%</span>' +
+                    '</div>' +
+                    (res.reasoning ? '<div style="font-size:0.85em; color:#666; margin:4px 0;">' + res.reasoning + '</div>' : '') +
+                    improvementsHtml +
+                    '<div style="margin-top:8px; font-size:0.8em;">' +
+                        '<span style="color:#3498db; cursor:pointer;" onclick="loadVersion(\'' + res.filename + '\')">Load this version</span>' +
+                    '</div>' +
+                '</div>';
+            container.insertAdjacentHTML('beforeend', itemHtml);
+        });
+
+        renderedCount += batch.length;
+
+        if (renderedCount < currentMatchResults.length) {
+            loadMoreContainer.innerHTML = '<span style="color:#3498db; cursor:pointer; text-decoration:underline;" onclick="showNextBatch()">Load 3 more matches</span>';
+        } else {
+            loadMoreContainer.innerHTML = '';
+        }
+    }
+
+    function loadVersion(filename) {
+        if (!confirm('Load version ' + filename + '? Unsaved changes will be lost.')) return;
+
+        fetch('/api/load/' + filename)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                editor.setValue(data.content, -1);
+
+                var match = filename.match(/^(.+?)_(\d{8}_\d{6})\.yaml$/);
+                if (match) {
+                    var parts = match[1];
+                    var segments = parts.split('_');
+                    if (segments.length > 1) {
+                        document.getElementById('save-keyword').value = segments[segments.length - 1];
+                    }
+                }
+
+                updatePreview();
+                document.getElementById('history-panel').classList.remove('open');
+                showToast('Version loaded.', 'info');
+            } else {
+                showToast(data.message, 'error');
+            }
+        });
+    }
+
+    function toggleWrap() {
+        var session = editor.getSession();
+        session.setUseWrapMode(!session.getUseWrapMode());
+    }
+
+    function checkGrammar() {
+        var resumeYaml = editor.getValue();
+        var provider = document.getElementById('ai-provider').value;
+        var apiKey = document.getElementById('ai-api-key').value;
+
+        if (!apiKey) {
+            apiKey = localStorage.getItem('api_key_' + provider);
+        }
+
+        var useLocal = confirm("Use Offline Grammar Check (LanguageTool)?\nOK = Offline, Cancel = AI Provider (" + provider + ")");
+
+        var selectedProvider = provider;
+        if (useLocal) {
+            selectedProvider = 'local';
+        } else {
+            if (!apiKey) {
+                var userKey = prompt('Enter your ' + provider + ' API Key:');
+                if (!userKey) {
+                    showToast("API Key is required for AI grammar check.", 'error');
+                    return;
+                }
+                apiKey = userKey;
+                localStorage.setItem('api_key_' + provider, apiKey);
+                document.getElementById('ai-api-key').value = apiKey;
+            }
+        }
+
+        var modal = document.getElementById('grammar-check-modal');
+        var resultsDiv = document.getElementById('grammar-results');
+
+        modal.style.display = 'flex';
+        resultsDiv.innerHTML = '<div style="text-align:center; padding:20px;">Analyzing content... Please wait.</div>';
+
+        fetch('/api/check_grammar', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ resume: resumeYaml, api_key: apiKey, provider: selectedProvider })
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                if (data.results.length === 0) {
+                    resultsDiv.innerHTML = '<div style="text-align:center; color:green; padding:20px;"><h3>No errors found!</h3><p>Great job!</p></div>';
+                } else {
+                    var html = '<ul style="list-style:none; padding:0;">';
+                    data.results.forEach(function(item, index) {
+                        var safeOriginal = item.original.replace(/"/g, '&quot;').replace(/'/g, "\\'");
+                        var safeCorrection = item.correction.replace(/"/g, '&quot;').replace(/'/g, "\\'");
+
+                        html +=
+                            '<li id="grammar-issue-' + index + '" style="border-bottom:1px solid #eee; padding:10px 0;">' +
+                                '<div style="display:flex; justify-content:space-between; align-items:baseline;">' +
+                                    '<strong style="color:#d9534f;">Issue #' + (index + 1) + '</strong>' +
+                                    '<span style="font-size:0.8em; color:#777;">' + (item.location || '') + '</span>' +
+                                '</div>' +
+                                '<div style="margin:5px 0; background:#fff3cd; padding:5px; border-left:3px solid #ffc107;">' +
+                                    '<strong>Original:</strong> "' + item.original + '"' +
+                                '</div>' +
+                                '<div style="margin:5px 0; background:#d4edda; padding:5px; border-left:3px solid #28a745;">' +
+                                    '<strong>Suggestion:</strong> "' + item.correction + '"' +
+                                '</div>' +
+                                '<div style="font-size:0.9em; color:#555; margin-top:5px;">' +
+                                    '<em>' + item.explanation + '</em>' +
+                                '</div>' +
+                                '<div style="margin-top:10px; display:flex; gap:10px;">' +
+                                    '<button onclick="acceptCorrection(\'' + safeOriginal + '\', \'' + safeCorrection + '\', \'grammar-issue-' + index + '\')" style="background:#28a745; font-size:0.9em; padding:4px 10px;">Accept</button>' +
+                                    '<button onclick="rejectCorrection(\'grammar-issue-' + index + '\')" style="background:#6c757d; font-size:0.9em; padding:4px 10px;">Reject</button>' +
+                                '</div>' +
+                            '</li>';
+                    });
+                    html += '</ul>';
+                    resultsDiv.innerHTML = html;
+                }
+            } else {
+                resultsDiv.innerHTML = '<div style="color:red; text-align:center;">Error: ' + data.message + '</div>';
+            }
+        })
+        .catch(function(err) {
+            resultsDiv.innerHTML = '<div style="color:red; text-align:center;">Error: ' + err.message + '</div>';
+        });
+    }
+
+    function acceptCorrection(original, correction, elementId) {
+        var content = editor.getValue();
+        if (content.includes(original)) {
+            var newContent = content.replace(original, correction);
+            editor.setValue(newContent, -1);
+            var el = document.getElementById(elementId);
+            if (el) {
+                el.style.opacity = '0.5';
+                el.style.pointerEvents = 'none';
+                el.innerHTML += '<div style="color:green; font-weight:bold; margin-top:5px;">Accepted</div>';
+            }
+            saveStateToLocal();
+            updatePreview();
+        } else {
+            showToast("Could not find exact text in editor. It might have been changed already.", 'error');
+        }
+    }
+
+    function rejectCorrection(elementId) {
+        var el = document.getElementById(elementId);
+        if (el) el.style.display = 'none';
+    }
+
+    function closeGrammarCheck() {
+        document.getElementById('grammar-check-modal').style.display = 'none';
+    }
+
+    // --- Delete Profile ---
+    function showDeleteProfile() {
+        document.getElementById('delete-profile-modal').style.display = 'flex';
+        document.getElementById('delete-confirm-text').value = '';
+        document.getElementById('delete-password').value = '';
+        document.getElementById('delete-error').textContent = '';
+        document.getElementById('delete-step-2').style.display = 'none';
+        document.getElementById('delete-step-1').style.display = 'block';
+    }
+    function closeDeleteProfile() {
+        document.getElementById('delete-profile-modal').style.display = 'none';
+    }
+    function deleteStep1() {
+        var text = document.getElementById('delete-confirm-text').value.trim();
+        if (text !== 'I agree to delete') {
+            document.getElementById('delete-error').textContent = 'Please type exactly: I agree to delete';
+            return;
+        }
+        document.getElementById('delete-step-1').style.display = 'none';
+        document.getElementById('delete-step-2').style.display = 'block';
+        document.getElementById('delete-error').textContent = '';
+    }
+    function deleteStep2() {
+        var password = document.getElementById('delete-password').value;
+        if (!password) {
+            document.getElementById('delete-error').textContent = 'Please enter your password.';
+            return;
+        }
+        document.getElementById('delete-error').textContent = '';
+
+        fetch('/api/delete_profile', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ password: password })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                window.location.href = '/login';
+            } else {
+                document.getElementById('delete-error').textContent = data.message || 'Deletion failed.';
+            }
+        })
+        .catch(function(err) {
+            document.getElementById('delete-error').textContent = 'Error: ' + err.message;
+        });
+    }
+</script>
+
+<!-- Delete Profile Modal -->
+<div id="delete-profile-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:3000; justify-content:center; align-items:center;">
+    <div style="background:white; width:440px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.2); overflow:hidden;">
+        <div style="padding:20px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; color:#dc3545;">Delete Account</h3>
+            <span onclick="closeDeleteProfile()" style="cursor:pointer; font-size:1.4em; color:#999;">&times;</span>
+        </div>
+        <div style="padding:24px;">
+            <div id="delete-step-1">
+                <p style="color:#666; margin-top:0;">This will <strong>permanently delete</strong> your account and all resume data. This action cannot be undone.</p>
+                <label style="display:block; font-size:0.85em; font-weight:600; color:#555; margin-bottom:6px;">Type <strong style="color:#dc3545;">I agree to delete</strong> to confirm:</label>
+                <input type="text" id="delete-confirm-text" placeholder="I agree to delete" style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.9em;">
+                <button onclick="deleteStep1()" style="width:100%; margin-top:14px; background:#dc3545; padding:10px; border-radius:6px; font-weight:600;">Continue</button>
+            </div>
+            <div id="delete-step-2" style="display:none;">
+                <p style="color:#666; margin-top:0;">Enter your password to confirm deletion:</p>
+                <input type="password" id="delete-password" placeholder="Your password" style="width:100%; padding:8px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.9em;">
+                <button onclick="deleteStep2()" style="width:100%; margin-top:14px; background:#dc3545; padding:10px; border-radius:6px; font-weight:600;">Delete My Account</button>
+            </div>
+            <div id="delete-error" style="color:#dc3545; font-size:0.85em; margin-top:10px; text-align:center;"></div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

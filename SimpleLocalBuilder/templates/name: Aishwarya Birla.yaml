@@ -1,0 +1,108 @@
+name: Aishwarya Birla
+contact:
+  location: New York, NY
+  phone: +1 646-244-9594
+  email: ab3347@cornell.edu
+  github: https://github.com/birlaaishwarya11
+  linkedin: https://www.linkedin.com/in/aishwarya-birla/
+  portfolio_label: Portfolio
+  portfolio_url: '#'
+summary: A passionate software engineer with a strong background in AI, cloud computing,
+  and distributed systems. Skilled in building scalable, secure, and efficient solutions
+  to complex problems. I am the best 
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+  coursework: Machine Learning Engineering, Deep Learning, Business Fundamentals,
+    Product Studio
+- institution: SRM IST
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: Languages
+  skills: Python, Java, C++, SQL, JavaScript, shell scripting
+- category: Cloud & DevOps
+  skills: AWS, Azure, Docker, Kubernetes, Terraform, CI/CD (GitLab), IaC, Prometheus,
+    Grafana.
+- category: AI & Agentic Systems
+  skills: LLMs, OpenAI Whisper, PhenoML (Agentic Frameworks), Agent Workflows, Prompt
+    Engineering.
+- category: Methodologies
+  skills: Agile, Scalable Production Systems
+experience:
+- company: ThoughtWorks
+  role: Developer Consultant
+  location: Pune, India
+  date: July 2022- May 2025
+  bullets:
+  - Collaborated with cross-functional engineering and data teams to design scalable
+    data-driven applications.
+  - Implemented CI/CD pipelines, containerized microservices, and Infrastructure as
+    code (IaC), automation, and configuration management, establishing CI/CD pipelines
+    to optimize deployment speed and system reliability.
+  - Developed secure API integrations leveraging data analytics workflows and monitoring
+    solutions (Prometheus, Grafana).
+  - Delivered enterprise-level software solutions with an emphasis on scalability,
+    data processing, and cloud resilience for three projects for one of the largest
+    financial institutes.
+projects:
+- name: dan.ai
+  event: NYC AI Agents Hackathon
+  award: Won best use of PhenoML and True Foundry awards
+  date: Oct 2025
+  bullets:
+  - Developed LLM-integrated agent system integrating OpenAI Whisper, Fast API, TrueFoundry,
+    PhenoML, and Streamlit to automate medical transcription and appointment booking
+    for non-native speakers.
+  - Implemented secure agent workflows with input sanitization and ethical guardrails
+    to protect sensitive medical context for non-native speakers.
+- name: Pitchbox Automated Demo Pipeline
+  event: Daytona Hack Sprint NYC
+  award: 2nd Price and Best use of Daytona
+  date: Nov 2025
+  bullets:
+  - Provisioned isolated, ephemeral development environments via Daytona SDK to host
+    headless browser automation systems.
+  - Integrated Puppeteer and FFmpeg in Dockized environments for UI interaction capture
+    and H.264 video encoding.
+  - Programmatically synchronized Eleven Labs audio with browser event logs and utilized
+    Tigris as a unified Data Lakehouse.
+- name: Cornell Tech Cleanup Crew live
+  event: Health in Climate Hackathon
+  award: Qualified to top 6
+  date: Sept 2025
+  bullets:
+  - Developed the end-to-end pipeline for wildfire health risk assessment at the county
+    level in California, cleaning and preprocessing multiple datasets (wildfire, census,
+    geography, health, and social vulnerability).
+  - Engineered a composite wildfire health risk score using machine learning models
+    (XGBoost), performed machine learning model optimization and real-world risk balancing.
+  - Delivered an interactive Next.js visualization dashboard for real-time analytic
+    insights and data visualization workflows, to access county-level health impact
+    enabling real-time wildfire risk insights for policy decision-makers.
+- name: MiniTorch ML Framework Engineering
+  date: Aug-Dec 2025
+  bullets:
+  - Architected a scalar and tensor-based Automatic Differentiation engine, utilizing
+    topological sorts for gradient calculation.
+  - Optimized ML infra performance by writing custom CUDA kernels and using Numba
+    JIT to bypass the Python GIL.
+  - Verified mathematical identities and tensor broadcasting rules through Property-Based
+    Testing (Hypothesis).
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for Techno-Management fest AARUUSH.
+  - Organized multiple events with student led NGO Blooming Beacon.
+  - Contributed as a part of digital communications in international club, ROTARACT-NYF.
+  research_papers:
+  - title: Developed blockchain-based smart contracts to secure and automate financial
+      transactions for vehicle rentals, improving trust and efficiency.
+    date: (Jul 2021-Dec 2021)
+  - title: Compared machine learning algorithms to identify food items from images,
+      optimizing performance and accuracy for real-world use.
+    date: (Jan 2022 - May 2022)

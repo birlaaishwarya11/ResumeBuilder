@@ -1,0 +1,103 @@
+name: Aishwarya Birla
+contact:
+  location: New York, NY
+  phone: +1 646-244-9594
+  email: ab3347@cornell.edu
+  github: https://github.com/birlaaishwarya11
+  linkedin: https://www.linkedin.com/in/aishwarya-birla/
+  portfolio_label: Portfolio
+  portfolio_url: https://aishwaryabirla.lovable.app
+summary: Backend Engineer with 3+ years building scalable systems and 
+    pipelines. Proven track record 
+    shipping features across data infrastructure and product endpoints; reducing deployment 
+    time by 60% while maintaining 99.9% uptime. Passionate about using technology to improve
+    health outcomes. Currently pursuing MEng at Cornell Tech with 3.9 GPA.
+
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+  coursework: Machine Learning Engineering, Deep Learning, Fairness in ML, Ubiquitous
+    Computing
+- institution: SRM Institute of Science & Technology
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: Backend & APIs
+  skills: Python, TypeScript, Node.js, FastAPI, Flask, RESTful APIs, Asynchronous Processing, WebSockets
+- category: AI/ML & Data Processing
+  skills: PyTorch, TensorFlow, Model Optimization, Statistical Analysis, Algorithm Design
+- category: Databases & Infrastructure
+  skills: PostgreSQL, MongoDB, Redis, Supabase, Database Design, Query Optimization, Data Pipelines
+- category: MLOps & DevOps
+  skills: Model Versioning, Monitoring & Alerting, CI/CD, Docker, Kubernetes, Prometheus, Grafana
+- category: Mathematics & Algorithms
+  skills: Statistics, Probability, Optimization Algorithms, Data Structures, Performance Analysis
+
+experience:
+- company: ThoughtWorks
+  role: Backend Engineer
+  location: Pune, India
+  date: July 2022 - May 2025
+  bullets:
+  - Implemented scalable backend systems, handling high-throughput data processing with 99.9% uptime for enterprise clients
+  - Built pipelines processing complex time-series and analytical data for banking clients, optimizing performance for real-time insights
+  - Engineered deployment pipelines with versioning, monitoring, and alerting infrastructure, reducing deployment time by 60%
+  - Implemented observability stack using Prometheus and Grafana, proactively detecting anomalies and reducing MTTR by 50%
+  - Established engineering best practices including automated testing, code reviews, and CI/CD ensuring production reliability
+  - Collaborated cross-functionally with product and data teams to ship features solving real user needs with measurable business impact
+
+projects:
+- name: Dan.ai (Healthcare AI System)
+  event: NYC AI Agents Hackathon
+  award: Best Use of TrueFoundry
+  date: Sept 2025
+  bullets:
+  - Built health tech backend processing real-time audio data to improve healthcare access for non-English speakers
+  - Designed scalable Python backend with FastAPI handling asynch speech-to-text processing, achieving 95% accuracy
+  - Implemented comprehensive monitoring and error handling ensuring 99.9% uptime for time-sensitive healthcare interactions
+  - Deployed containerized infrastructure with auto-scaling capabilities handling variable user load patterns
+
+- name: MiniTorch (ML Framework Engineering)
+  event: Academic Project - Cornell Tech
+  date: Aug-Dec 2025
+  bullets:
+  - Implemented Automatic Differentiation engine demonstrating deep understanding of calculus and optimization algorithms
+  - Engineered custom CUDA kernels using sampling and parallel computing techniques, achieving 10x performance improvement
+  - Designed efficient algorithms for tensor operations with rigorous mathematical validation using property-based testing
+  - Optimized performance-critical code paths through profiling and algorithmic improvements, reducing computation time by 65%
+
+- name: CTCC (Health Risk Analytics System)
+  event: Health in Climate Hackathon
+  date: Sept 2025
+  bullets:
+  - Engineered backend data pipeline processing health, environmental, and demographic datasets for predictive health risk modeling
+  - Built ML-powered risk scoring model using XGBoost with statistical feature engineering optimizing prediction accuracy
+  - Implemented data validation and quality checks using statistical methods ensuring high-fidelity health predictions
+  - Developed TypeScript/React dashboard enabling users to query and visualize health risk insights across geographic regions
+
+- name: SeeMeThru (Healthcare Monitoring System)
+  event: NexHacks CMU Hackathon
+  award: 3rd Prize - Best Use of Overshoot
+  date: Jan 2026
+  bullets:
+  - Built real-time health monitoring backend processing continuous video streams for automated caregiver documentation
+  - Architected pipeline with rule-based algorithms and ML-powered analysis, reducing storage by 70% while preserving critical events
+  - Designed asynch data processing system with FastAPI handling time-sensitive healthcare notifications with guaranteed delivery
+  - Implemented monitoring and alerting infrastructure ensuring 99.9% system reliability for production healthcare deployment
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for the Techno-Management fest AARUUSH.
+  - Organized multiple events with student-led NGO Blooming Beacon.
+  - Contributed to digital communications for the international club ROTARACT-NYF.
+  research_papers:
+  - title: Developed blockchain-based smart contracts to secure and automate financial
+      transactions for vehicle rentals, improving trust and efficiency.
+    date: (Jul 2021 - Dec 2021)
+  - title: Compared machine learning algorithms to identify food items from images,
+      optimizing performance and accuracy for real-world use.
+    date: (Jan 2022 - May 2022)

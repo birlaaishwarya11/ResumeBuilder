@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - Resume Builder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+
+        /* Toast */
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+        .toast {
+            padding: 12px 20px; border-radius: 8px; color: white; margin-bottom: 8px;
+            font-size: 0.9em; animation: toast-in 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .toast-success { background: #27ae60; }
+        .toast-error { background: #e74c3c; }
+        .toast-info { background: #3498db; }
+        .toast.fade-out { animation: toast-out 0.3s ease-in forwards; }
+        @keyframes toast-in { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toast-out { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(60px); } }
+
+        /* Upload step */
+        .upload-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .upload-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            padding: 48px 40px;
+            width: 100%;
+            max-width: 520px;
+        }
+        .upload-card h1 {
+            font-size: 1.6em;
+            margin-bottom: 6px;
+            color: #333;
+        }
+        .upload-card .subtitle {
+            color: #666;
+            font-size: 0.95em;
+            margin-bottom: 28px;
+            line-height: 1.4;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #555;
+            margin-bottom: 4px;
+            margin-top: 16px;
+        }
+        input[type="text"], input[type="file"], select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+        input:focus, select:focus { outline: none; border-color: #007bff; }
+        .file-note {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            font-weight: 600;
+            text-align: center;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-primary:disabled { background: #a0c4e8; cursor: not-allowed; }
+        .btn-secondary { background: #f0f2f5; color: #333; border: 1px solid #ddd; }
+        .btn-secondary:hover { background: #e2e6ea; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #218838; }
+
+        .divider {
+            text-align: center;
+            margin: 24px 0;
+            color: #999;
+            font-size: 0.85em;
+            position: relative;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #ddd;
+        }
+        .divider::before { left: 0; }
+        .divider::after { right: 0; }
+
+        .skip-link {
+            display: block;
+            text-align: center;
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .skip-link:hover { text-decoration: underline; }
+
+        /* Review step */
+        .review-container {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .review-header {
+            padding: 12px 20px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .review-header h2 { font-size: 1.1em; color: #333; }
+        .review-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .review-left, .review-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .review-left {
+            border-right: 1px solid #ddd;
+        }
+        .panel-label {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #eee;
+        }
+        #yaml-editor {
+            flex: 1;
+            font-size: 14px;
+        }
+        #preview-frame {
+            flex: 1;
+            border: none;
+            width: 100%;
+            height: 100%;
+        }
+        .review-footer {
+            padding: 12px 20px;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .review-footer .btn { min-width: 180px; }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- Step 1: Upload -->
+<div id="upload-step" class="upload-container">
+    <div class="upload-card">
+        <h1>Welcome, {{ user.name }}!</h1>
+        <div class="subtitle">Upload an existing resume PDF to get started, or skip to build from scratch.</div>
+
+        <label for="resume-pdf">Resume PDF</label>
+        <input type="file" id="resume-pdf" accept=".pdf">
+        <div class="file-note">We'll extract content and styling from your PDF to pre-fill the editor.</div>
+
+        <div id="parse-options" style="display:none; margin-top:16px; padding:14px; background:#f8f9fa; border-radius:8px; border:1px solid #e9ecef;">
+            <label style="margin-top:0; font-size:0.9em; font-weight:600;">Parsing Mode</label>
+            <div style="display:flex; gap:10px; margin-top:6px;">
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:normal; margin:0;">
+                    <input type="radio" name="parse_mode" value="local" checked> Local (no API key)
+                </label>
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:normal; margin:0;">
+                    <input type="radio" name="parse_mode" value="ai" id="parse-ai-radio"> AI-powered
+                </label>
+            </div>
+
+            <div id="ai-parse-settings" style="display:none; margin-top:12px;">
+                <label style="margin-top:0;">AI Provider</label>
+                <select id="ai-provider">
+                    <option value="anthropic">Claude (Anthropic)</option>
+                    <option value="openai">GPT (OpenAI)</option>
+                    <option value="gemini">Gemini (Google)</option>
+                </select>
+                <label>API Key</label>
+                <input type="text" id="ai-api-key" placeholder="sk-... or your API key" style="font-size:0.85em;">
+                <label>Model (optional)</label>
+                <input type="text" id="ai-model" placeholder="Leave blank for default" style="font-size:0.85em;">
+                <div class="file-note" style="margin-top:6px;">AI parsing produces more accurate results for complex resume formats.</div>
+            </div>
+        </div>
+
+        <button id="parse-btn" class="btn btn-primary" style="width:100%; margin-top:20px;" disabled>Parse Resume</button>
+
+        <div class="divider">OR</div>
+
+        <a class="skip-link" id="skip-btn">Skip, start from scratch</a>
+    </div>
+</div>
+
+<!-- Step 2: Review -->
+<div id="review-step" class="review-container">
+    <div class="review-header">
+        <h2>Review Parsed Resume</h2>
+        <span style="font-size:0.85em; color:#666;">Edit the YAML on the left. Preview updates automatically.</span>
+    </div>
+    <div class="review-body">
+        <div class="review-left">
+            <div class="panel-label">YAML Editor</div>
+            <div id="yaml-editor"></div>
+        </div>
+        <div class="review-right">
+            <div class="panel-label">Preview</div>
+            <iframe id="preview-frame"></iframe>
+        </div>
+    </div>
+    <div class="review-footer">
+        <button id="reupload-btn" class="btn btn-secondary">Re-upload Different PDF</button>
+        <button id="confirm-btn" class="btn btn-success">Confirm &amp; Continue</button>
+    </div>
+</div>
+
+<script>
+    var parsedData = null;
+    var yamlEditor = null;
+    var previewTimeout = null;
+
+    function showToast(message, type) {
+        var container = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        toast.className = 'toast toast-' + (type || 'info');
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(function() {
+            toast.classList.add('fade-out');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
+    }
+
+    // Show/hide parse options when file selected
+    document.getElementById('resume-pdf').addEventListener('change', function() {
+        var hasFile = this.files.length > 0;
+        document.getElementById('parse-options').style.display = hasFile ? 'block' : 'none';
+        document.getElementById('parse-btn').disabled = !hasFile;
+    });
+
+    // Show/hide AI settings
+    document.querySelectorAll('input[name="parse_mode"]').forEach(function(radio) {
+        radio.addEventListener('change', function() {
+            document.getElementById('ai-parse-settings').style.display =
+                document.getElementById('parse-ai-radio').checked ? 'block' : 'none';
+        });
+    });
+
+    // Parse button
+    document.getElementById('parse-btn').addEventListener('click', function() {
+        var fileInput = document.getElementById('resume-pdf');
+        if (!fileInput.files.length) return;
+
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Parsing...';
+
+        var formData = new FormData();
+        formData.append('resume_pdf', fileInput.files[0]);
+        formData.append('parse_mode', document.querySelector('input[name="parse_mode"]:checked').value);
+
+        if (document.getElementById('parse-ai-radio').checked) {
+            formData.append('ai_provider', document.getElementById('ai-provider').value);
+            formData.append('ai_api_key', document.getElementById('ai-api-key').value);
+            formData.append('ai_model', document.getElementById('ai-model').value);
+        }
+
+        fetch('/api/upload_resume', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Parse Resume';
+            if (data.status === 'success') {
+                parsedData = data;
+                showReviewStep();
+                showToast('PDF parsed successfully!', 'success');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Parse Resume';
+            showToast('Parse failed: ' + err.message, 'error');
+        });
+    });
+
+    // Skip button
+    document.getElementById('skip-btn').addEventListener('click', function() {
+        if (!confirm('Start with an empty editor? You won\'t be able to upload a PDF later.')) return;
+
+        fetch('/api/skip_onboarding', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                window.location.href = '/';
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        });
+    });
+
+    // Show review step
+    function showReviewStep() {
+        document.getElementById('upload-step').style.display = 'none';
+        document.getElementById('review-step').style.display = 'flex';
+
+        if (!yamlEditor) {
+            yamlEditor = ace.edit('yaml-editor');
+            yamlEditor.setTheme('ace/theme/chrome');
+            yamlEditor.session.setMode('ace/mode/yaml');
+            yamlEditor.setOptions({
+                fontSize: '14px',
+                showPrintMargin: false,
+                wrap: true
+            });
+            yamlEditor.session.on('change', function() {
+                clearTimeout(previewTimeout);
+                previewTimeout = setTimeout(updatePreview, 800);
+            });
+        }
+
+        yamlEditor.setValue(parsedData.yaml, -1);
+        updatePreview();
+    }
+
+    // Re-upload button
+    document.getElementById('reupload-btn').addEventListener('click', function() {
+        document.getElementById('review-step').style.display = 'none';
+        document.getElementById('upload-step').style.display = 'flex';
+        parsedData = null;
+        document.getElementById('resume-pdf').value = '';
+        document.getElementById('parse-btn').disabled = true;
+        document.getElementById('parse-options').style.display = 'none';
+    });
+
+    // Confirm button
+    document.getElementById('confirm-btn').addEventListener('click', function() {
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Saving...';
+
+        var yamlContent = yamlEditor.getValue();
+
+        fetch('/api/complete_onboarding', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resume: yamlContent,
+                header: parsedData.header,
+                style: parsedData.style,
+                custom_sections: parsedData.custom_sections
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                showToast('Setup complete! Redirecting...', 'success');
+                setTimeout(function() { window.location.href = '/'; }, 1000);
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Confirm & Continue';
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Confirm & Continue';
+            showToast('Save failed: ' + err.message, 'error');
+        });
+    });
+
+    // Preview update
+    function updatePreview() {
+        if (!parsedData || !yamlEditor) return;
+
+        var yamlContent = yamlEditor.getValue();
+
+        fetch('/api/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resume: yamlContent,
+                style: parsedData.style
+            })
+        })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            var iframe = document.getElementById('preview-frame');
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+        })
+        .catch(function(err) {
+            console.error('Preview error:', err);
+        });
+    }
+</script>
+</body>
+</html>

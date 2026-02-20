@@ -1,0 +1,108 @@
+name: Aishwarya Birla
+contact:
+  location: New York, NY
+  phone: +1 646-244-9594
+  email: ab3347@cornell.edu
+  github: https://github.com/birlaaishwarya11
+  linkedin: https://www.linkedin.com/in/aishwarya-birla/
+  portfolio_label: Portfolio
+  portfolio_url: '#'
+summary: Full-stack Software Engineer with 3+ years building scalable web applications and backend systems at ThoughtWorks. Experienced in delivering features while maintaining code quality and system reliability. Strong collaborator who partners across product, design, and engineering to ship impactful solutions. Currently pursuing MEng at Cornell Tech with 3.9 GPA.
+
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+
+- institution: SRM Institute of Science & Technology
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: Backend & APIs
+  skills: Python, FastAPI, Java, Spring Boot, Node.js, RESTful APIs, GraphQL, Server-Side Applications
+- category: Frontend Development
+  skills: TypeScript, React, JavaScript, Next.js, CSS, HTML, Web Components, Responsive Design
+- category: Databases & ORMs
+  skills: PostgreSQL, Supabase, MongoDB, Redis, Database Design
+- category: Cloud & Infrastructure
+  skills: AWS, Azure, Docker, Kubernetes, Terraform, Infrastructure as Code
+- category: DevOps & Tools
+  skills: CI/CD Pipelines (GitLab CI/CD, GitHub Actions), Git, Prometheus, Grafana, Agile
+
+experience:
+- company: ThoughtWorks
+  role: ML Infrastructure Engineer
+  location: Pune, India
+  date: July 2022 - May 2025
+  bullets:
+  - Designed and implemented scalable backend services and RESTful APIs using Java and Python, handling high-throughput requests with 99.9% uptime for banking clients
+  - Engineered CI/CD pipelines using GitLab CI/CD and GitHub Actions, automating build, test, and deployment workflows that reduced deployment time by 60%
+  - Built full-stack web applications using Backstage framework
+  - Implemented monitoring and observability using Prometheus and Grafana, reducing MTTR by 50%
+  - Collaborated directly with stakeholders, product managers and designers to translate user requirements into technical solutions, ensuring features solved real customer problems
+  - Led migration of 40+ microservices to standardized deployment using helm templates, reducing configuration errors and accelerating onboarding
+  - Optimized Azure infrastructure costs by 20% through rightsizing, automated cleanup, and resource lifecycle management
+  - Participated in design reviews and architectural discussions, contributing to systems design decisions for scalable solutions
+  - Mentored junior developers through code reviews, pair programming, and technical guidance on best practices
+
+projects:
+- name: MiniTorch (ML Framework from Scratch)
+  event: Academic Project - Cornell Tech
+  date: Aug-Dec 2025
+  bullets:
+  - Implemented production-grade Automatic Differentiation engine with scalar and
+    tensor operations
+  - Built computational graph using topological sorting for backpropagation through
+    complex nested functions
+  - Engineered N-dimensional tensor library with manual indexing, striding, and NumPy-style
+    broadcasting rules
+  - Developed custom CUDA kernels using Numba JIT compilation to parallelize matrix
+    multiplications
+  - Optimized kernels for element-wise operations, reductions, and matrix ops bypassing
+    Python GIL
+  - Validated mathematical correctness using Property-Based Testing (Hypothesis) across
+    float64 tensors
+- name: ColorEdit-Flux (Advanced Diffusion Models)
+  event: Research Project - Cornell Tech
+  date: Sept-Dec 2025
+  bullets:
+  - Implemented dual-loss framework for FLUX transformer diffusion model with robust
+    color-object binding
+  - Engineered Stroop Attention Loss using Jensen-Shannon divergence to guide color
+    associations
+  - Developed Masked Color Loss from cross-attention maps eliminating
+    external dependencies
+  - Modified FLUX sampler with temporal loss scheduling for structural formation and
+    RGB stabilization
+  - Evaluated using CompColor benchmark with CIEDE2000 color distance and CLIPSeg
+    segmentation
+  - Achieved improved binding accuracy through K-means clustering against target HTML
+    color values
+- name: SeeMeThru (Hybrid ML System)
+  event: NexHacks CMU Hackathon
+  award: 3rd Prize - Best Use of Overshoot
+  date: Jan 2025
+  bullets:
+  - Architected neuro-symbolic pipeline combining rule-based safety routing with LLM
+    semantic compression
+  - Built real-time video-to-text system reducing storage by 70% while preserving
+    critical context
+
+  - Integrated inference pipeline with production messaging for instant notifications
+
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for the Techno-Management fest AARUUSH.
+  - Organized multiple events with student-led NGO Blooming Beacon.
+  - Contributed to digital communications for the international club ROTARACT-NYF.
+  research_papers:
+  - title: Developed blockchain-based smart contracts to secure and automate financial
+      transactions for vehicle rentals, improving trust and efficiency.
+    date: (Jul 2021 - Dec 2021)
+  - title: Compared machine learning algorithms to identify food items from images,
+      optimizing performance and accuracy for real-world use.
+    date: (Jan 2022 - May 2022)

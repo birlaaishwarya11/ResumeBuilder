@@ -1,0 +1,122 @@
+name: Aishwarya Birla
+contact:
+  location: New York, NY
+  phone: +1 646-244-9594
+  email: ab3347@cornell.edu
+  github: https://github.com/birlaaishwarya11
+  linkedin: https://www.linkedin.com/in/aishwarya-birla/
+  portfolio_label: Portfolio
+  portfolio_url: '#'
+summary: Machine Learning Engineer specializing in deep learning systems, generative AI, and production ML pipelines. Built ML frameworks from scratch with CUDA optimization and deployed AI systems achieving 95% accuracy. Strong technical communicator who collaborates across teams to translate complex ML concepts into production systems. Currently pursuing MEng at Cornell Tech with 3.9 GPA.
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+  coursework: Machine Learning Engineering, Deep Learning
+- institution: SRM Institute of Science & Technology
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: ML & Deep Learning
+  skills: PyTorch, TensorFlow, CUDA, Automatic Differentiation, Transformers, Diffusion Models, Neural Networks
+- category: Generative AI
+  skills: LLM Orchestration (Claude/GPT-4), Stable Diffusion, FLUX, Prompt Engineering, Image Generation
+- category: ML Engineering
+  skills: Model Training, Feature Engineering, XGBoost, Gradient Boosting, Property-Based Testing, Model Optimization
+- category: AI Agents & Frameworks
+  skills: Agentic Workflows (OpenHands, PhenoML, Overshoot), Speech-to-Text, NLP, Semantic Analysis
+- category: Development & Deployment
+  skills: Python, Java, FastAPI, Docker, Kubernetes, Cloud ML (AWS/Azure), Git, Agile
+
+experience:
+- company: ThoughtWorks
+  role: ML Infrastructure Engineer
+  location: Pune, India
+  date: July 2022 - May 2025
+  bullets:
+  - Designed and deployed ML-driven automation systems improving operational efficiency by 40% for enterprise clients
+  - Engineered automated experimentation infrastructure enabling concurrent model training and evaluation
+  - Built end-to-end deployment pipelines with automated validation, achieving 99.9% serving uptime
+  - Developed resource optimization algorithms for ML workloads, reducing training costs by 20%
+  - Implemented model monitoring framework tracking performance metrics and detecting degradation
+  - Created standardized ML templates adopted across 40+ models, reducing time-to-production
+  - Executed production migrations maintaining 100% service availability for inference endpoints
+  - Collaborated with stakeholders to translate business requirements into ML solutions
+  - Mentored engineers on ML best practices, model development, and production deployment
+
+- company: ThoughtWorks
+  role: Graduate Software Engineer
+  location: Pune, India
+  date: March 2022 - June 2022
+  bullets:
+  - Implemented ML testing frameworks using TDD and property-based testing methodologies
+  - Delivered ML features in Agile sprints with pair programming and code reviews
+
+projects:
+- name: MiniTorch (ML Framework from Scratch)
+  event: Academic Project - Cornell Tech
+  date: Aug-Dec 2025
+  bullets:
+  - Implemented production-grade Automatic Differentiation engine with scalar and tensor operations
+  - Built computational graph using topological sorting for backpropagation through complex nested functions
+  - Engineered N-dimensional tensor library with manual indexing, striding, and NumPy-style broadcasting rules
+  - Developed custom CUDA kernels using Numba JIT compilation to parallelize matrix multiplications
+  - Optimized kernels for element-wise operations, reductions, and matrix ops bypassing Python GIL
+  - Validated mathematical correctness using Property-Based Testing (Hypothesis) across float64 tensors
+
+- name: ColorEdit-Flux (Advanced Diffusion Models)
+  event: Research Project - Cornell Tech
+  date: Sept-Dec 2025
+  bullets:
+  - Implemented dual-loss framework for FLUX transformer diffusion model with robust color-object binding
+  - Engineered Stroop Attention Loss using Jensen-Shannon divergence to guide color associations
+  - Developed Masked Color Loss with soft masks from cross-attention maps eliminating external dependencies
+  - Modified FLUX sampler with temporal loss scheduling for structural formation and RGB stabilization
+  - Evaluated using CompColor benchmark with CIEDE2000 color distance and CLIPSeg segmentation
+  - Achieved improved binding accuracy through K-means clustering against target HTML color values
+
+- name: CTCC (Predictive Health Risk Modeling)
+  event: Health in Climate Hackathon
+  date: Jan 2025
+  bullets:
+  - Built composite risk model using XGBoost integrating wildfire exposure, air quality, and social vulnerability
+  - Engineered features balancing wildfire perimeters, AQI, and socio-economic factors for health predictions
+  - Performed model optimization and regularization addressing data sparsity at county-level granularity
+  - Developed Next.js geospatial dashboard visualizing ML predictions with interactive county overlays
+
+- name: SeeMeThru (Hybrid ML System)
+  event: NexHacks CMU Hackathon
+  award: 3rd Prize - Best Use of Overshoot
+  date: Jan 2025
+  bullets:
+  - Architected neuro-symbolic pipeline combining rule-based safety routing with LLM semantic compression
+  - Built real-time video-to-text system reducing storage by 70% while preserving critical context
+  - Designed hybrid ML approach balancing deterministic rules with probabilistic language models
+  - Integrated inference pipeline with production messaging for instant notifications
+
+- name: Dan.ai (Multilingual AI Agent)
+  event: NYC AI Agents Hackathon
+  award: Best Use of TrueFoundry
+  date: Sept 2025
+  bullets:
+  - Built multilingual speech-to-text pipeline preserving intent across languages with 95% accuracy
+  - Implemented agentic AI using Claude (Anthropic) for natural language understanding
+  - Designed OpenHands-powered workflow parsing unstructured voice into structured JSON
+  - Deployed FastAPI endpoints achieving sub-second response times for real-time interactions
+
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for the Techno-Management fest AARUUSH.
+  - Organized multiple events with student-led NGO Blooming Beacon.
+  - Contributed to digital communications for the international club ROTARACT-NYF.
+  research_papers:
+  - title: Developed blockchain-based smart contracts to secure and automate financial
+      transactions for vehicle rentals, improving trust and efficiency.
+    date: (Jul 2021 - Dec 2021)
+  - title: Compared machine learning algorithms to identify food items from images,
+      optimizing performance and accuracy for real-world use.
+    date: (Jan 2022 - May 2022)

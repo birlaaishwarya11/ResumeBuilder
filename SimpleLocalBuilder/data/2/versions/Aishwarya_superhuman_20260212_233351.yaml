@@ -1,0 +1,116 @@
+summary: Software Engineer graduating May 2026 from Cornell Tech with 3+ years hands-on
+  experience building scalable production systems. Shipped features at ThoughtWorks
+  for enterprise clients processing high-volume workloads with 99.9% reliability.
+  Strong CS fundamentals with proven ability to work independently, ship end-to-end
+  projects, and learn new technologies quickly.
+education:
+- institution: Cornell Tech, Cornell University
+  location: New York, NY
+  degree: MEng in Computer Science
+  gpa: '3.9'
+  date: May 2026
+  coursework: Machine Learning Engineering, Deep Learning, Fairness in ML
+- institution: SRM Institute of Science & Technology
+  location: Chennai, India
+  degree: BTech in Computer Science Engineering
+  gpa: '4.0'
+  date: May 2022
+technical_skills:
+- category: Programming & Frameworks
+  skills: Python, TypeScript, JavaScript, Java, FastAPI, Spring Boot
+- category: AI & ML Technologies
+  skills: LLM Orchestration (Claude, GPT-4), AI Agents, PyTorch, TensorFlow, Prompt
+    Engineering
+- category: Backend & Infrastructure
+  skills: RESTful APIs, Distributed Systems, Databases (PostgreSQL, MongoDB, Redis),
+    Microservices, cloud computing
+- category: Development Tools
+  skills: Git, CI/CD, Test-Driven Development, System Design, Modern Engineering Workflows
+experience:
+- company: ThoughtWorks
+  role: Developer Consultant
+  location: Pune, India
+  date: July 2022 - May 2025
+  bullets:
+  - Shipped backend features for enterprise banking clients, improving workflows and
+    operational efficiency
+  - Built scalable services using Java, Spring Boot, and Python handling high-throughput
+    requests with 99.9% uptime
+  - Developed data pipelines processing complex datasets for real-time analysis and
+    reporting
+  - Participated in system design discussions and code reviews, collaborating with
+    senior engineers on architecture decisions
+  - Deployed applications on cloud infrastructure implementing auto-scaling and high-availability
+    patterns
+  - Debugged production issues and participated in post-mortems to improve system
+    reliability
+  - Built CI/CD pipelines reducing deployment time by 60% through automated testing
+    and validation
+  - Implemented monitoring and alerting infrastructure reducing MTTR by 30% through
+    proactive detection
+  - Worked independently on end-to-end features from design through deployment with
+    minimal guidance
+  - Collaborated with product managers and designers to deliver features that solved
+    real customer problems
+- company: ThoughtWorks
+  role: Graduate Developer Consultant
+  location: Pune, India
+  date: March 2022 - June 2022
+  bullets:
+  - Delivered features using Agile methodologies and Test-Driven Development, shipping
+    production code
+  - Built automated testing frameworks ensuring code quality and system reliability
+projects:
+- name: Dan.ai (AI Agent Backend)
+  event: NYC AI Agents Hackathon
+  award: Best Use of TrueFoundry
+  date: Sept 2025
+  bullets:
+  - Built AI agent processing multilingual audio with strong intent recognition accuracy
+  - Designed agentic workflow leveraging LLMs to parse unstructured voice into structured
+    data for automated scheduling
+  - Implemented conversation handling and session management for multi-turn AI interactions
+  - Deployed system on cloud with health checks and auto-scaling
+- name: SeeMeThru (Real-time Processing System)
+  event: NexHacks CMU Hackathon
+  award: 3rd Prize - Best Use of Overshoot
+  date: Jan 2026
+  bullets:
+  - Built real-time processing backend handling continuous video streams
+  - Architected pipeline combining rule-based logic with ML-powered analysis, reducing
+    storage by 70%
+  - Designed asynchronous system with FastAPI for time-sensitive notifications with
+    guaranteed delivery
+- name: Pitchbox (Full-Stack Demo Automation)
+  event: Daytona Hack Sprint NYC
+  award: 2nd Prize & Best Use of Daytona
+  date: Oct 2025
+  bullets:
+  - Built full-stack application using Anthropic and Eleven labs generating automated
+    demos with AI voiceovers
+  - Engineered backend with Daytona, orchestrating headless browser automation and
+    video encoding
+  - Designed storage architecture handling video blobs and session metadata with ACID
+    compliance in Tigris
+- name: MiniTorch (Framework Implementation)
+  event: Cornell Tech Academic Project
+  date: Aug-Dec 2025
+  bullets:
+  - Implemented computational framework from scratch demonstrating strong fundamentals
+  - Built efficient processing pipeline with parallel operations using CUDA
+  - Designed system handling complex computational graphs with automatic differentiation
+  - Validated correctness through comprehensive property-based testing
+extracurricular:
+  bullets:
+  - Led a team of 100+ people as Committee Head for the Techno-Management fest AARUUSH.
+  - Organized multiple events with student-led NGO Blooming Beacon.
+  - Contributed to digital communications for the international club ROTARACT-NYF.
+name: AISHWARYA BIRLA
+contact:
+  location: New York, NY
+  phone: 646-244-9594
+  email: ab3347@cornell.edu
+  github: https://github.com/birlaaishwarya11
+  linkedin: https://www.linkedin.com/in/aishwarya-birla/
+  portfolio_label: Portfolio
+  portfolio_url: https://aishwaryabirla.lovable.app/
