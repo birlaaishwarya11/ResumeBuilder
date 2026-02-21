@@ -15,7 +15,11 @@ from models import (
     is_onboarding_complete, mark_onboarding_complete,
     DEFAULT_SECTION_NAMES
 )
-from pdf_parser import parse_resume_pdf, extract_style_from_pdf
+from pdf_parser import (parse_resume_pdf, extract_style_from_pdf,
+                        extract_text_local, parse_resume_from_extracted,
+                        _smart_parse_section, _normalize_section_key)
+from confidence import score_parsed_resume
+import sandbox as daytona_sandbox
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -110,8 +114,51 @@ def _infer_render_type(data):
     return 'bullets'
 
 
+def _build_annotated_text(extracted_data):
+    """Convert extracted line data into AI-friendly text with font hints.
+
+    Lines that are bold or large get prefixes like [H1 BOLD] to help AI
+    understand document structure without seeing the raw PDF.
+    """
+    parts = []
+    for page in extracted_data.get('pages', []):
+        for line in page.get('lines', []):
+            text = line.get('text', '').strip()
+            if not text:
+                continue
+            size = line.get('size', 10.0)
+            bold = line.get('bold', False)
+
+            prefix = ''
+            if size >= 16:
+                prefix = '[H1 BOLD] ' if bold else '[H1] '
+            elif size >= 13:
+                prefix = '[H2 BOLD] ' if bold else '[H2] '
+            elif bold:
+                prefix = '[BOLD] '
+
+            parts.append(prefix + text)
+    return '\n'.join(parts)
+
+
+def _build_raw_text(extracted_data):
+    """Build a plain-text representation from extracted data for display."""
+    parts = []
+    for page in extracted_data.get('pages', []):
+        for line in page.get('lines', []):
+            text = line.get('text', '').strip()
+            if text:
+                parts.append(text)
+    return '\n'.join(parts)
+
+
 def _ai_parse_resume(pdf_path, provider, api_key, model=None):
-    """Use an AI provider to parse a resume PDF into structured YAML data."""
+    """Use an AI provider to parse a resume PDF into structured data.
+    Two-phase approach:
+      Phase 1 - Discover the resume's unique structure (sections + types)
+      Phase 2 - Extract all data using the discovered schema
+    Works for any resume type: engineering, academic, creative, legal, medical, etc.
+    """
     import pdfplumber
 
     # Extract raw text from PDF
@@ -126,63 +173,140 @@ def _ai_parse_resume(pdf_path, provider, api_key, model=None):
     if not raw_text.strip():
         return {}
 
-    system_prompt = """You are a resume parser. Extract the resume content into a structured JSON object.
-Return ONLY valid JSON with these exact keys (omit empty sections):
+    try:
+        return _ai_parse_two_phase(raw_text, provider, api_key, model)
+    except Exception as e:
+        print(f"Two-phase AI parse failed ({e}), falling back to single-phase")
+        return _ai_parse_single_phase(raw_text, provider, api_key, model)
+
+
+def _ai_parse_two_phase(raw_text, provider, api_key, model=None):
+    """Two-phase AI parsing: discover structure then extract data."""
+
+    # --- Phase 1: Discover resume structure ---
+    schema_prompt = """You are a resume structure analyzer that works with ANY resume format — engineering, academic, creative, legal, medical, business, etc.
+
+Identify the person's name, contact info, and EVERY section in the resume.
+
+Map sections to these standard keys ONLY when the content clearly matches:
+- "education" → education, academic background
+- "experience" → work/professional/clinical/research experience, employment
+- "technical_skills" → skills, technical skills, tools, competencies, design tools
+- "projects" → projects, portfolio pieces, case studies
+- "extracurricular" → activities, volunteer, leadership
+- "summary" → summary, objective, profile, about
+
+For ALL other sections, create a descriptive snake_case key. Examples:
+- "PUBLICATIONS" → "publications"
+- "TEACHING EXPERIENCE" → "teaching_experience"
+- "AWARDS & HONORS" → "awards_honors"
+- "EXHIBITIONS" → "exhibitions"
+- "GRANTS & FUNDING" → "grants_funding"
+- "PROFESSIONAL AFFILIATIONS" → "professional_affiliations"
+- "CERTIFICATIONS" → "certifications"
+- "LANGUAGES" → "languages"
+
+Classify each section's content type as one of:
+- "entries": Items with a header (org/title/name), optional date/location, and optional bullets (use for: experience, education, projects, research positions, teaching, volunteer roles, publications with details)
+- "skills": Category-colon-items format (use for: technical skills, languages with proficiency, tools by category)
+- "bullets": Simple flat list of items (use for: awards list, certifications list, interests, activities without dates)
+- "text": Paragraph text (use for: summary, objective, profile)
+
+Return ONLY valid JSON:
 {
   "name": "Full Name",
-  "contact": {
-    "location": "City, State",
-    "phone": "+1-555-123-4567",
-    "email": "email@example.com",
-    "github": "https://github.com/...",
-    "linkedin": "https://linkedin.com/in/...",
-    "portfolio_url": "",
-    "portfolio_label": "Portfolio"
-  },
-  "summary": "Professional summary text...",
-  "education": [
-    {
-      "institution": "University Name",
-      "location": "City, State",
-      "degree": "Degree Name",
-      "gpa": "3.9",
-      "date": "May 2026",
-      "honors": "Optional honors/awards",
-      "coursework": "Optional relevant coursework"
-    }
-  ],
-  "technical_skills": [
-    {"category": "Category Name", "skills": "Skill1, Skill2, Skill3"}
-  ],
-  "experience": [
-    {
-      "company": "Company Name",
-      "role": "Job Title",
-      "location": "City, State",
-      "date": "Jan 2023 - Present",
-      "bullets": ["Achievement 1", "Achievement 2"]
-    }
-  ],
-  "projects": [
-    {
-      "name": "Project Name",
-      "subtitle": "Optional subtitle",
-      "event": "Optional event/hackathon",
-      "award": "Optional award",
-      "date": "Date",
-      "url": "",
-      "bullets": ["Description 1", "Description 2"]
-    }
-  ],
-  "extracurricular": {
-    "bullets": ["Activity 1", "Activity 2"]
-  }
-}
+  "contact": {"email": "", "phone": "", "location": "", "linkedin": "", "github": "", "portfolio_url": "", "portfolio_label": "Portfolio"},
+  "sections": [
+    {"key": "snake_case_key", "display_name": "EXACT HEADING FROM RESUME", "type": "entries|skills|bullets|text"}
+  ]
+}"""
 
-For sections that don't fit the above categories (e.g., Certifications, Awards, Publications, Languages),
-create additional top-level keys using snake_case (e.g., "certifications", "awards_honors").
-Use the same structure patterns: list of bullets, list of entries with company/role/date/bullets, or list of category/skills objects.
-Preserve ALL content from the resume. Do not summarize or omit anything."""
+    schema_response = call_ai_provider(provider, api_key, schema_prompt,
+                                       f"Analyze this resume's structure:\n\n{raw_text}", model)
+    schema = parse_json_response(schema_response)
+
+    if not isinstance(schema, dict) or 'sections' not in schema:
+        raise ValueError("Phase 1 did not return valid schema")
+
+    # --- Phase 2: Build dynamic extraction prompt from discovered schema ---
+    # Map known keys to specific field formats; use generic formats for unknown sections
+    KNOWN_ENTRY_FORMATS = {
+        'education': '{"institution": "", "location": "", "degree": "", "gpa": "", "date": "", "honors": "", "coursework": ""}',
+        'experience': '{"company": "", "role": "", "location": "", "date": "", "bullets": ["..."]}',
+        'projects': '{"name": "", "subtitle": "", "event": "", "award": "", "date": "", "url": "", "bullets": ["..."]}',
+    }
+    GENERIC_ENTRY_FORMAT = '{"name": "", "role": "", "location": "", "date": "", "bullets": ["..."], "url": ""}'
+    SKILLS_FORMAT = '{"category": "Category Name", "skills": "Skill1, Skill2, Skill3"}'
+
+    section_specs = []
+    for s in schema.get('sections', []):
+        key = s.get('key', '')
+        stype = s.get('type', 'bullets')
+        display = s.get('display_name', key)
+
+        if stype == 'entries':
+            fmt = KNOWN_ENTRY_FORMATS.get(key, GENERIC_ENTRY_FORMAT)
+            section_specs.append(f'  "{key}" ("{display}"): list of {fmt}')
+        elif stype == 'skills':
+            section_specs.append(f'  "{key}" ("{display}"): list of {SKILLS_FORMAT}')
+        elif stype == 'text':
+            section_specs.append(f'  "{key}" ("{display}"): single string')
+        elif key == 'extracurricular':
+            section_specs.append(f'  "{key}" ("{display}"): {{"bullets": ["..."]}}')
+        else:  # bullets
+            section_specs.append(f'  "{key}" ("{display}"): list of strings ["item1", "item2"]')
+
+    sections_block = '\n'.join(section_specs)
+
+    extract_prompt = f"""You are a resume data extractor. Extract ALL content from this resume into the structure below.
+
+"name": "Full Name"
+"contact": {{"email": "", "phone": "", "location": "", "linkedin": "", "github": "", "portfolio_url": "", "portfolio_label": "Portfolio"}}
+
+Sections to extract:
+{sections_block}
+
+Rules:
+- Preserve ALL content exactly as written. Do not summarize or omit anything.
+- Every bullet point, skill, entry, and detail must be included.
+- Use empty string "" for missing optional fields. Never use null.
+- For entries: use the FIRST non-empty field among name/company/institution/title as the primary identifier.
+- Return ONLY valid JSON with "name", "contact", and each section key."""
+
+    extract_response = call_ai_provider(provider, api_key, extract_prompt,
+                                        f"Extract all resume data:\n\n{raw_text}", model)
+    parsed = parse_json_response(extract_response)
+
+    if isinstance(parsed, list) and parsed:
+        parsed = parsed[0]
+    if not isinstance(parsed, dict):
+        raise ValueError("Phase 2 did not return valid data")
+
+    return parsed
+
+
+def _ai_parse_single_phase(raw_text, provider, api_key, model=None):
+    """Fallback single-phase AI parsing for any resume type."""
+    system_prompt = """You are an expert resume parser that handles ANY resume format (engineering, academic, creative, legal, medical, business, etc.).
+
+Extract ALL content into structured JSON.
+
+Use these standard keys when the section clearly matches:
+- "education": [{"institution": "", "location": "", "degree": "", "gpa": "", "date": "", "honors": "", "coursework": ""}]
+- "experience": [{"company": "", "role": "", "location": "", "date": "", "bullets": []}]
+- "projects": [{"name": "", "subtitle": "", "event": "", "award": "", "date": "", "url": "", "bullets": []}]
+- "technical_skills": [{"category": "", "skills": "comma-separated"}]
+- "extracurricular": {"bullets": ["..."]}
+- "summary": "paragraph string"
+
+For ALL other sections (publications, teaching, certifications, awards, exhibitions, grants, languages, affiliations, etc.), create descriptive snake_case keys and use the best-fit format:
+- Entry-based: [{"name": "", "role": "", "location": "", "date": "", "bullets": [], "url": ""}]
+- Skill-based: [{"category": "", "skills": ""}]
+- Bullet-based: ["item1", "item2"]
+- Text: "paragraph string"
+
+Always include "name" and "contact" (with email, phone, location, linkedin, github, portfolio_url, portfolio_label).
+Include ALL sections from the resume. Preserve ALL content. Return ONLY valid JSON."""
 
     user_msg = f"Parse this resume:\n\n{raw_text}"
     response_text = call_ai_provider(provider, api_key, system_prompt, user_msg, model)
@@ -264,7 +388,13 @@ def onboarding():
 @app.route('/api/upload_resume', methods=['POST'])
 @login_required
 def upload_resume():
-    """Upload and parse a PDF during onboarding. Returns parsed data as JSON."""
+    """Upload and parse a PDF during onboarding. Returns parsed data as JSON.
+
+    Single pipeline:
+      1. Extract text (sandbox if available, else local)
+      2. Parse (AI two-phase if key provided, else heuristic)
+      3. Return YAML + raw text + confidence + style
+    """
     user_id = get_current_user_id()
     if is_onboarding_complete(user_id):
         return jsonify({"status": "error", "message": "Onboarding already completed."}), 400
@@ -273,7 +403,6 @@ def upload_resume():
     if not pdf_file or not pdf_file.filename or not pdf_file.filename.lower().endswith('.pdf'):
         return jsonify({"status": "error", "message": "Please upload a valid PDF file."}), 400
 
-    parse_mode = request.form.get('parse_mode', 'local')
     ai_provider = request.form.get('ai_provider', '')
     ai_api_key = request.form.get('ai_api_key', '')
     ai_model = request.form.get('ai_model', '')
@@ -285,13 +414,37 @@ def upload_resume():
     try:
         extracted_style = extract_style_from_pdf(pdf_path)
 
-        if parse_mode == 'ai' and ai_api_key:
-            parsed = _ai_parse_resume(pdf_path, ai_provider, ai_api_key, ai_model)
+        # Step 1: Extract text with font metadata
+        extracted_data = daytona_sandbox.extract_text_in_sandbox(pdf_path)
+        extraction_source = 'sandbox'
+        if not extracted_data:
+            extracted_data = extract_text_local(pdf_path)
+            extraction_source = 'local'
+
+        if not extracted_data or not extracted_data.get('pages'):
+            return jsonify({"status": "error",
+                            "message": "Could not extract text from PDF. The file may be image-only or corrupted."}), 500
+
+        raw_text = _build_raw_text(extracted_data)
+
+        # Step 2: Parse into structured data
+        if ai_api_key:
+            # AI two-phase parsing with annotated text (font hints)
+            annotated_text = _build_annotated_text(extracted_data)
+            try:
+                parsed = _ai_parse_two_phase(annotated_text, ai_provider, ai_api_key, ai_model)
+            except Exception as e:
+                print(f"AI parse failed ({e}), falling back to heuristic")
+                parsed = parse_resume_from_extracted(extracted_data)
         else:
-            parsed = parse_resume_pdf(pdf_path)
+            parsed = parse_resume_from_extracted(extracted_data)
 
         if not parsed:
-            return jsonify({"status": "error", "message": "Could not parse the PDF. Try a different file or AI mode."}), 500
+            return jsonify({"status": "error",
+                            "message": "Could not parse the PDF. Try providing an AI API key for better results."}), 500
+
+        # Step 3: Build response
+        confidence = score_parsed_resume(parsed)
 
         header = {
             "name": parsed.get('name', ''),
@@ -317,10 +470,123 @@ def upload_resume():
             "yaml": yaml_content,
             "header": header,
             "style": extracted_style,
-            "custom_sections": custom_sections
+            "custom_sections": custom_sections,
+            "confidence": confidence,
+            "raw_text": raw_text,
+            "extraction_source": extraction_source
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/sandbox_status')
+@login_required
+def sandbox_status():
+    """Check if Daytona sandbox is available for parsing."""
+    return jsonify({
+        "available": daytona_sandbox.is_available(),
+        "api_url": daytona_sandbox.DAYTONA_API_URL if daytona_sandbox.DAYTONA_API_KEY else None,
+    })
+
+
+@app.route('/api/search_section', methods=['POST'])
+@login_required
+def search_section():
+    """Search for a missing section in the uploaded PDF.
+
+    Tries sandbox first, falls back to local pdfplumber extraction.
+    Returns the found section as a YAML snippet ready to append.
+    """
+    user_id = get_current_user_id()
+    data = request.json
+    section_hint = data.get('section_hint', '').strip()
+
+    if not section_hint:
+        return jsonify({"status": "error", "message": "Please enter a section name to search for."}), 400
+
+    user_dir = get_user_dir(user_id)
+    pdf_path = os.path.join(user_dir, 'onboarding_upload.pdf')
+
+    if not os.path.exists(pdf_path):
+        return jsonify({"status": "error", "message": "No PDF uploaded. Please re-upload your resume."}), 400
+
+    try:
+        # Try sandbox search first
+        search_result = daytona_sandbox.search_section_in_sandbox(pdf_path, section_hint)
+
+        # Fallback to local search
+        if not search_result.get('found'):
+            search_result = _search_section_local(pdf_path, section_hint)
+
+        if not search_result.get('found'):
+            return jsonify({"status": "not_found",
+                            "message": f"Could not find a section matching '{section_hint}' in your PDF."})
+
+        # Parse the found lines into structured data
+        section_lines = search_result.get('lines', [])
+        text_lines = [l.get('text', '') for l in section_lines]
+        line_meta = section_lines  # already has text/size/bold
+
+        # Use smart parsing to determine best format
+        render_type, parsed = _smart_parse_section(text_lines, line_meta)
+
+        # Build section key
+        section_key = _normalize_section_key(section_hint)
+        if not section_key or section_key == 'other':
+            section_key = section_hint.lower().replace(' ', '_')
+
+        # Build YAML snippet
+        yaml_snippet = yaml.dump({section_key: parsed}, sort_keys=False, allow_unicode=True)
+
+        # Raw text for display
+        raw_lines = '\n'.join(text_lines)
+
+        return jsonify({
+            "status": "found",
+            "section_key": section_key,
+            "heading": search_result.get('heading', section_hint),
+            "yaml_snippet": yaml_snippet,
+            "raw_lines": raw_lines,
+            "render_type": render_type,
+            "display_name": section_hint.upper()
+        })
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+def _search_section_local(pdf_path, section_hint):
+    """Local fallback for section search using pdfplumber directly."""
+    try:
+        extracted = extract_text_local(pdf_path)
+        if not extracted or not extracted.get('pages'):
+            return {"found": False}
+
+        hint_lower = section_hint.lower().strip()
+
+        # Flatten all lines
+        all_lines = []
+        for page in extracted['pages']:
+            for line in page.get('lines', []):
+                all_lines.append(line)
+
+        # Search for the heading
+        for i, line in enumerate(all_lines):
+            line_lower = line.get('text', '').lower().strip()
+            if hint_lower in line_lower or line_lower in hint_lower:
+                alpha = [c for c in line.get('text', '') if c.isalpha()]
+                is_caps = alpha and all(c.isupper() for c in alpha) and len(alpha) > 2
+                if line.get('bold') or is_caps or line.get('size', 10) > 11:
+                    context_lines = all_lines[i + 1:i + 31]
+                    return {
+                        "found": True,
+                        "heading": line['text'],
+                        "lines": context_lines
+                    }
+
+        return {"found": False}
+    except Exception:
+        return {"found": False}
 
 
 @app.route('/api/complete_onboarding', methods=['POST'])

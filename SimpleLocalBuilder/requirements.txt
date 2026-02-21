@@ -7,3 +7,4 @@ openai
 google-generativeai
 language-tool-python
 pdfplumber
+daytona-sdk

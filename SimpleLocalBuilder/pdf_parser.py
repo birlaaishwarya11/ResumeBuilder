@@ -9,33 +9,77 @@ import pdfplumber
 
 
 # Common section heading keywords (lowercased) — must match the FULL line (not substring)
+# Covers: engineering, academic, creative/design, medical, legal, business resume types
 SECTION_KEYWORDS = {
-    "education": ["education", "academic background", "academic history", "academics"],
+    "education": ["education", "academic background", "academic history", "academics",
+                  "academic qualifications", "educational background"],
     "technical_skills": ["technical skills", "skills", "technologies", "competencies",
                          "tools & technologies", "tools and technologies",
-                         "core competencies", "technical proficiencies"],
+                         "core competencies", "technical proficiencies",
+                         "skills & expertise", "technical expertise",
+                         "design tools", "design skills", "software proficiency",
+                         "skills & tools", "tools & frameworks",
+                         "programming languages", "technical competencies"],
     "experience": ["experience", "professional experience", "work experience",
                    "employment history", "employment", "work history",
-                   "relevant experience", "industry experience"],
+                   "relevant experience", "industry experience",
+                   "professional background", "career history"],
     "projects": ["projects", "projects and hackathon highlights", "personal projects",
                  "project highlights", "academic projects", "side projects",
-                 "key projects", "selected projects"],
+                 "key projects", "selected projects", "portfolio",
+                 "portfolio projects", "case studies", "design projects",
+                 "creative projects", "selected work"],
     "extracurricular": ["extracurricular", "extracurricular activities", "volunteer",
                         "leadership", "activities", "leadership & activities",
                         "extracurricular activities /volunteer & research papers",
                         "extracurricular activities / volunteer & research papers",
-                        "community involvement", "volunteer experience"],
+                        "community involvement", "volunteer experience",
+                        "service & leadership", "civic engagement"],
     "certifications": ["certifications", "certifications & licenses", "licenses",
                        "professional certifications", "certificates",
-                       "technical certifications"],
+                       "technical certifications", "credentials",
+                       "professional development", "training",
+                       "training & certifications"],
     "publications": ["publications", "research", "research papers", "papers",
-                     "journal publications", "conference papers"],
+                     "journal publications", "conference papers",
+                     "selected publications", "research publications",
+                     "scholarly work", "bibliography",
+                     "presentations & publications", "conference presentations"],
     "awards": ["awards", "awards & honors", "honors", "honors & awards",
-               "achievements", "accomplishments"],
-    "languages": ["languages", "language proficiency", "language skills"],
+               "achievements", "accomplishments", "recognitions",
+               "scholarships", "fellowships", "grants",
+               "awards & scholarships", "honors & scholarships",
+               "grants & funding", "funding"],
+    "languages": ["languages", "language proficiency", "language skills",
+                  "foreign languages"],
     "interests": ["interests", "hobbies", "hobbies & interests", "personal interests"],
     "summary": ["summary", "professional summary", "objective", "career objective",
-                "profile", "about me", "about", "executive summary"],
+                "profile", "about me", "about", "executive summary",
+                "career summary", "personal statement", "professional profile"],
+    # Academic-specific
+    "teaching": ["teaching", "teaching experience", "courses taught",
+                 "academic appointments", "instruction",
+                 "teaching & mentoring", "mentoring"],
+    "research_experience": ["research experience", "research positions",
+                            "research appointments", "lab experience"],
+    "presentations": ["presentations", "conference presentations",
+                      "talks", "invited talks", "lectures", "speaking"],
+    # Professional
+    "affiliations": ["affiliations", "professional affiliations", "memberships",
+                     "professional memberships", "associations",
+                     "professional associations", "board memberships"],
+    "references": ["references", "professional references"],
+    # Creative/design
+    "exhibitions": ["exhibitions", "shows", "gallery exhibitions",
+                    "solo exhibitions", "group exhibitions"],
+    "clients": ["clients", "selected clients", "client work",
+                "key clients", "notable clients"],
+    # Medical/clinical
+    "clinical_experience": ["clinical experience", "clinical rotations",
+                            "clinical training", "residency",
+                            "clinical practice"],
+    "licensure": ["licensure", "board certifications",
+                  "medical licenses", "professional licenses"],
 }
 
 # Regex patterns
@@ -143,18 +187,21 @@ def _build_line(chars):
 
 
 def classify_section(heading_text):
-    """Match a heading string to a known section key. Requires close match, not substring."""
+    """Match a heading string to a known section key. Prefers longer (more specific) matches."""
     lower = heading_text.lower().strip()
     # Strip common decorators
     lower = re.sub(r'[/|&,]+', ' ', lower)
     lower = re.sub(r'\s+', ' ', lower).strip()
 
+    best_key = None
+    best_len = 0
     for key, keywords in SECTION_KEYWORDS.items():
         for kw in keywords:
-            # Exact match or the heading starts with the keyword
             if lower == kw or lower.startswith(kw):
-                return key
-    return None
+                if len(kw) > best_len:
+                    best_key = key
+                    best_len = len(kw)
+    return best_key
 
 
 def is_section_heading(line, median_size):
@@ -868,12 +915,59 @@ def extract_style_from_pdf(pdf_path):
     return style
 
 
-def parse_resume_pdf(pdf_path):
+def extract_text_local(pdf_path):
+    """Extract text with font metadata from a PDF locally (no sandbox).
+
+    Returns the same format as sandbox extraction:
+        {"pages": [{"page": 1, "lines": [{"text": "...", "size": 14.0, "bold": true}]}]}
     """
-    Main entry point: parse a resume PDF into a structured dict.
-    Returns a dict matching the YAML structure used by the resume template.
+    pages = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num, page in enumerate(pdf.pages, 1):
+            chars = page.chars
+            if not chars:
+                text = page.extract_text()
+                if text:
+                    lines = [{"text": line, "size": 10.0, "bold": False}
+                             for line in text.splitlines() if line.strip()]
+                    if lines:
+                        pages.append({"page": page_num, "lines": lines})
+                continue
+
+            # Reuse existing extraction logic
+            sorted_chars = sorted(chars, key=lambda c: (round(c['top'], 1), c['x0']))
+            current_line_chars = []
+            current_y = None
+            raw_lines = []
+
+            for ch in sorted_chars:
+                y = round(ch['top'], 1)
+                if current_y is None or abs(y - current_y) > 3:
+                    if current_line_chars:
+                        raw_lines.append(current_line_chars)
+                    current_line_chars = [ch]
+                    current_y = y
+                else:
+                    current_line_chars.append(ch)
+            if current_line_chars:
+                raw_lines.append(current_line_chars)
+
+            lines = []
+            for line_chars in raw_lines:
+                built = _build_line(line_chars)
+                if built['text']:
+                    lines.append(built)
+
+            if lines:
+                pages.append({"page": page_num, "lines": lines})
+
+    return {"pages": pages}
+
+
+def _parse_from_lines(lines):
+    """Core parsing logic: takes a list of {text, size, bold} line dicts
+    and returns a structured resume dict.
     """
-    lines = extract_lines_with_meta(pdf_path)
     if not lines:
         return {}
 
@@ -965,6 +1059,28 @@ def parse_resume_pdf(pdf_path):
     if 'certifications' in section_texts:
         result['certifications'] = parse_skills_section(section_texts['certifications'])
 
+    # Sections that are best parsed as experience-style entries (org + role + date + bullets)
+    for exp_key in ('teaching', 'research_experience', 'clinical_experience'):
+        if exp_key in section_texts and exp_key not in result:
+            meta = section_meta.get(exp_key, None)
+            result[exp_key] = parse_experience_section(section_texts[exp_key], line_meta=meta)
+
+    # Sections that are best parsed as project-style entries (name + details + bullets)
+    for proj_key in ('publications', 'presentations', 'exhibitions', 'clients'):
+        if proj_key in section_texts and proj_key not in result:
+            meta = section_meta.get(proj_key, None)
+            result[proj_key] = parse_projects_section(section_texts[proj_key], line_meta=meta)
+
+    # Sections that are best parsed as flat bullet lists
+    for bullet_key in ('awards', 'interests', 'references', 'languages'):
+        if bullet_key in section_texts and bullet_key not in result:
+            result[bullet_key] = parse_bullets(section_texts[bullet_key])
+
+    # Sections best parsed as skill-style (category: items)
+    for skill_key in ('affiliations', 'licensure'):
+        if skill_key in section_texts and skill_key not in result:
+            result[skill_key] = parse_skills_section(section_texts[skill_key])
+
     # Handle "summary" if detected as a section
     if 'summary' in section_texts and 'summary' not in result:
         result['summary'] = ' '.join(l.strip() for l in section_texts['summary'] if l.strip())
@@ -976,3 +1092,35 @@ def parse_resume_pdf(pdf_path):
             result[key] = parsed
 
     return {"name": name, "contact": contact, **result}
+
+
+def parse_resume_from_extracted(extracted_data):
+    """Parse a resume from pre-extracted text data (from sandbox or local extraction).
+
+    Args:
+        extracted_data: dict with {"pages": [{"page": N, "lines": [{"text":"...", "size":..., "bold":...}]}]}
+
+    Returns:
+        dict: Parsed resume data matching the YAML template format.
+    """
+    if not extracted_data or not extracted_data.get('pages'):
+        return {}
+
+    # Flatten all pages into a single line list
+    all_lines = []
+    for page in extracted_data['pages']:
+        for line in page.get('lines', []):
+            all_lines.append(line)
+
+    return _parse_from_lines(all_lines)
+
+
+def parse_resume_pdf(pdf_path):
+    """
+    Main entry point: parse a resume PDF into a structured dict.
+    Returns a dict matching the YAML structure used by the resume template.
+    """
+    lines = extract_lines_with_meta(pdf_path)
+    if not lines:
+        return {}
+    return _parse_from_lines(lines)

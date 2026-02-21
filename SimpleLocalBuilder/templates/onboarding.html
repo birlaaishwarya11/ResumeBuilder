@@ -181,6 +181,61 @@
         }
         .review-footer .btn { min-width: 180px; }
 
+        /* Confidence bar */
+        .confidence-bar {
+            padding: 10px 16px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            font-size: 0.82em;
+        }
+        .confidence-bar .overall {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .confidence-bar .score-pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.95em;
+        }
+        .score-high { background: #d4edda; color: #155724; }
+        .score-med  { background: #fff3cd; color: #856404; }
+        .score-low  { background: #f8d7da; color: #721c24; }
+        .confidence-issues {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .issue-chip {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .chip-missing { background: #f8d7da; color: #721c24; }
+        .chip-review  { background: #fff3cd; color: #856404; }
+
+        /* Tabs */
+        .tab-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            font-size: 0.82em;
+            font-weight: 600;
+            color: #888;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-btn:hover { color: #333; }
+        .tab-active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+        }
+
         /* Spinner */
         .spinner {
             display: inline-block;
@@ -210,30 +265,23 @@
         <input type="file" id="resume-pdf" accept=".pdf">
         <div class="file-note">We'll extract content and styling from your PDF to pre-fill the editor.</div>
 
-        <div id="parse-options" style="display:none; margin-top:16px; padding:14px; background:#f8f9fa; border-radius:8px; border:1px solid #e9ecef;">
-            <label style="margin-top:0; font-size:0.9em; font-weight:600;">Parsing Mode</label>
-            <div style="display:flex; gap:10px; margin-top:6px;">
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:normal; margin:0;">
-                    <input type="radio" name="parse_mode" value="local" checked> Local (no API key)
-                </label>
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:normal; margin:0;">
-                    <input type="radio" name="parse_mode" value="ai" id="parse-ai-radio"> AI-powered
-                </label>
-            </div>
-
-            <div id="ai-parse-settings" style="display:none; margin-top:12px;">
-                <label style="margin-top:0;">AI Provider</label>
-                <select id="ai-provider">
-                    <option value="anthropic">Claude (Anthropic)</option>
-                    <option value="openai">GPT (OpenAI)</option>
-                    <option value="gemini">Gemini (Google)</option>
-                </select>
-                <label>API Key</label>
-                <input type="text" id="ai-api-key" placeholder="sk-... or your API key" style="font-size:0.85em;">
-                <label>Model (optional)</label>
-                <input type="text" id="ai-model" placeholder="Leave blank for default" style="font-size:0.85em;">
-                <div class="file-note" style="margin-top:6px;">AI parsing produces more accurate results for complex resume formats.</div>
-            </div>
+        <div id="parse-options" style="display:none; margin-top:16px;">
+            <details id="ai-settings" style="padding:14px; background:#f8f9fa; border-radius:8px; border:1px solid #e9ecef;">
+                <summary style="cursor:pointer; font-size:0.9em; font-weight:600; color:#555;">Have an AI API key? (optional &mdash; improves accuracy)</summary>
+                <div style="margin-top:12px;">
+                    <label style="margin-top:0;">AI Provider</label>
+                    <select id="ai-provider">
+                        <option value="anthropic">Claude (Anthropic)</option>
+                        <option value="openai">GPT (OpenAI)</option>
+                        <option value="gemini">Gemini (Google)</option>
+                    </select>
+                    <label>API Key</label>
+                    <input type="text" id="ai-api-key" placeholder="sk-... or your API key" style="font-size:0.85em;">
+                    <label>Model (optional)</label>
+                    <input type="text" id="ai-model" placeholder="Leave blank for default" style="font-size:0.85em;">
+                    <div class="file-note" style="margin-top:6px;">Providing an API key enables AI-powered parsing for more accurate results.</div>
+                </div>
+            </details>
         </div>
 
         <button id="parse-btn" class="btn btn-primary" style="width:100%; margin-top:20px;" disabled>Parse Resume</button>
@@ -250,10 +298,27 @@
         <h2>Review Parsed Resume</h2>
         <span style="font-size:0.85em; color:#666;">Edit the YAML on the left. Preview updates automatically.</span>
     </div>
+    <div id="confidence-bar" class="confidence-bar" style="display:none;"></div>
     <div class="review-body">
         <div class="review-left">
-            <div class="panel-label">YAML Editor</div>
-            <div id="yaml-editor"></div>
+            <div style="display:flex; border-bottom:1px solid #eee; background:#f8f9fa;">
+                <button id="tab-yaml" class="tab-btn tab-active" onclick="switchTab('yaml')">YAML Editor</button>
+                <button id="tab-rawtext" class="tab-btn" onclick="switchTab('rawtext')">Raw Text</button>
+            </div>
+            <div id="yaml-editor" style="flex:1;"></div>
+            <pre id="raw-text-view" style="display:none; flex:1; overflow:auto; padding:12px 16px; margin:0; font-size:13px; line-height:1.5; background:#fff; white-space:pre-wrap; word-wrap:break-word;"></pre>
+            <!-- Missing section search -->
+            <div id="section-search" style="padding:10px 16px; background:#f8f9fa; border-top:1px solid #eee;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span style="font-size:0.82em; color:#666; white-space:nowrap;">Missing something?</span>
+                    <input type="text" id="section-hint" placeholder="e.g. Awards, Certifications, Publications" style="flex:1; padding:6px 10px; font-size:0.85em;">
+                    <button id="search-section-btn" class="btn btn-primary" style="padding:6px 14px; font-size:0.85em;" onclick="searchSection()">Search</button>
+                </div>
+                <div id="search-result" style="display:none; margin-top:8px; padding:10px; background:#fff; border:1px solid #e9ecef; border-radius:6px; font-size:0.85em;">
+                    <div id="search-result-content"></div>
+                    <button id="add-to-yaml-btn" class="btn btn-success" style="margin-top:8px; padding:4px 12px; font-size:0.85em;" onclick="addSearchResultToYaml()">Add to YAML</button>
+                </div>
+            </div>
         </div>
         <div class="review-right">
             <div class="panel-label">Preview</div>
@@ -290,14 +355,6 @@
         document.getElementById('parse-btn').disabled = !hasFile;
     });
 
-    // Show/hide AI settings
-    document.querySelectorAll('input[name="parse_mode"]').forEach(function(radio) {
-        radio.addEventListener('change', function() {
-            document.getElementById('ai-parse-settings').style.display =
-                document.getElementById('parse-ai-radio').checked ? 'block' : 'none';
-        });
-    });
-
     // Parse button
     document.getElementById('parse-btn').addEventListener('click', function() {
         var fileInput = document.getElementById('resume-pdf');
@@ -309,11 +366,12 @@
 
         var formData = new FormData();
         formData.append('resume_pdf', fileInput.files[0]);
-        formData.append('parse_mode', document.querySelector('input[name="parse_mode"]:checked').value);
 
-        if (document.getElementById('parse-ai-radio').checked) {
+        // Include AI settings if provided
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (apiKey) {
             formData.append('ai_provider', document.getElementById('ai-provider').value);
-            formData.append('ai_api_key', document.getElementById('ai-api-key').value);
+            formData.append('ai_api_key', apiKey);
             formData.append('ai_model', document.getElementById('ai-model').value);
         }
 
@@ -328,7 +386,9 @@
             if (data.status === 'success') {
                 parsedData = data;
                 showReviewStep();
-                showToast('PDF parsed successfully!', 'success');
+                var source = data.extraction_source === 'sandbox' ? ' (via sandbox)' : '';
+                var mode = data.raw_text ? (apiKey ? 'AI' : 'heuristic') : '';
+                showToast('PDF parsed successfully' + source + '!', 'success');
             } else {
                 showToast('Error: ' + data.message, 'error');
             }
@@ -358,6 +418,134 @@
         });
     });
 
+    // Render confidence bar
+    function renderConfidence(confidence) {
+        var bar = document.getElementById('confidence-bar');
+        if (!confidence || confidence.overall === undefined) {
+            bar.style.display = 'none';
+            return;
+        }
+        bar.style.display = 'block';
+
+        var pct = Math.round(confidence.overall * 100);
+        var cls = pct >= 70 ? 'score-high' : pct >= 40 ? 'score-med' : 'score-low';
+
+        var html = '<div class="overall">';
+        html += '<span>Parse confidence:</span>';
+        html += '<span class="score-pill ' + cls + '">' + pct + '%</span>';
+        html += '</div>';
+
+        var chips = [];
+        (confidence.missing || []).forEach(function(f) {
+            chips.push('<span class="issue-chip chip-missing">' + f.replace('contact.', '') + ' missing</span>');
+        });
+        (confidence.low_confidence || []).forEach(function(f) {
+            if ((confidence.missing || []).indexOf(f) === -1) {
+                chips.push('<span class="issue-chip chip-review">' + f.replace('contact.', '') + ' needs review</span>');
+            }
+        });
+
+        if (chips.length) {
+            html += '<div class="confidence-issues">' + chips.join('') + '</div>';
+        }
+
+        bar.innerHTML = html;
+    }
+
+    // Tab switching
+    function switchTab(tab) {
+        var yamlEl = document.getElementById('yaml-editor');
+        var rawEl = document.getElementById('raw-text-view');
+        var tabYaml = document.getElementById('tab-yaml');
+        var tabRaw = document.getElementById('tab-rawtext');
+
+        if (tab === 'yaml') {
+            yamlEl.style.display = 'block';
+            rawEl.style.display = 'none';
+            tabYaml.classList.add('tab-active');
+            tabRaw.classList.remove('tab-active');
+            if (yamlEditor) yamlEditor.resize();
+        } else {
+            yamlEl.style.display = 'none';
+            rawEl.style.display = 'block';
+            tabYaml.classList.remove('tab-active');
+            tabRaw.classList.add('tab-active');
+        }
+    }
+
+    // Section search
+    var lastSearchSnippet = '';
+    function searchSection() {
+        var hint = document.getElementById('section-hint').value.trim();
+        if (!hint) { showToast('Enter a section name to search for.', 'error'); return; }
+
+        var btn = document.getElementById('search-section-btn');
+        btn.disabled = true;
+        btn.textContent = 'Searching...';
+
+        fetch('/api/search_section', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({section_hint: hint})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Search';
+
+            if (data.status === 'found') {
+                lastSearchSnippet = data.yaml_snippet;
+                var resultDiv = document.getElementById('search-result');
+                var contentDiv = document.getElementById('search-result-content');
+                contentDiv.innerHTML = '<strong>Found: ' + data.heading + '</strong><pre style="margin:6px 0 0; font-size:0.9em; max-height:120px; overflow:auto; background:#f8f9fa; padding:8px; border-radius:4px;">' +
+                    data.yaml_snippet.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+                resultDiv.style.display = 'block';
+
+                // Store custom section info for later
+                if (data.section_key && parsedData) {
+                    parsedData._pending_section = {
+                        key: data.section_key,
+                        display_name: data.display_name || data.heading,
+                        render_type: data.render_type || 'bullets'
+                    };
+                }
+
+                showToast('Found "' + data.heading + '" section!', 'success');
+            } else {
+                document.getElementById('search-result').style.display = 'none';
+                showToast(data.message || 'Section not found.', 'info');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Search';
+            showToast('Search failed: ' + err.message, 'error');
+        });
+    }
+
+    function addSearchResultToYaml() {
+        if (!lastSearchSnippet || !yamlEditor) return;
+        var current = yamlEditor.getValue();
+        var newContent = current.trimEnd() + '\n\n' + lastSearchSnippet;
+        yamlEditor.setValue(newContent, -1);
+
+        // Add to custom_sections if not already there
+        if (parsedData && parsedData._pending_section) {
+            var sec = parsedData._pending_section;
+            if (!parsedData.custom_sections) parsedData.custom_sections = [];
+            var exists = parsedData.custom_sections.some(function(s) { return s.key === sec.key; });
+            if (!exists) {
+                parsedData.custom_sections.push(sec);
+            }
+            delete parsedData._pending_section;
+        }
+
+        document.getElementById('search-result').style.display = 'none';
+        document.getElementById('section-hint').value = '';
+        lastSearchSnippet = '';
+        showToast('Section added to your resume!', 'success');
+    }
+
     // Show review step
     function showReviewStep() {
         document.getElementById('upload-step').style.display = 'none';
@@ -379,6 +567,16 @@
         }
 
         yamlEditor.setValue(parsedData.yaml, -1);
+
+        // Populate raw text tab
+        if (parsedData.raw_text) {
+            document.getElementById('raw-text-view').textContent = parsedData.raw_text;
+        }
+
+        // Reset to YAML tab
+        switchTab('yaml');
+
+        renderConfidence(parsedData.confidence);
         updatePreview();
     }
 
@@ -390,6 +588,9 @@
         document.getElementById('resume-pdf').value = '';
         document.getElementById('parse-btn').disabled = true;
         document.getElementById('parse-options').style.display = 'none';
+        document.getElementById('search-result').style.display = 'none';
+        document.getElementById('section-hint').value = '';
+        lastSearchSnippet = '';
     });
 
     // Confirm button
