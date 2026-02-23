@@ -3,36 +3,30 @@ name: Deploy to TrueFoundry
 on:
   push:
     branches:
-      - main
-    paths:
-      - 'SimpleLocalBuilder/**'
+      - 'main'
+
+env:
+  TFY_HOST: https://demo.truefoundry.cloud
+  TFY_API_KEY: ${{ secrets.TFY_API_KEY }}
+  APPLICATION_FQN: odsc-cluster:dan-ai-nyc:resumebuilder
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: SimpleLocalBuilder
-
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: 3.11
 
-      - name: Install TrueFoundry CLI
-        run: pip install truefoundry
-
-      - name: Login to TrueFoundry
-        run: tfy login --host "${{ secrets.TFY_HOST }}" --api-key "${{ secrets.TFY_API_KEY }}" --no-browser
-
-      - name: Deploy to TrueFoundry
+      - name: Install dependencies
         run: |
-          python deploy_tfy.py \
-            --workspace_fqn "${{ secrets.TFY_WORKSPACE_FQN }}" \
-            --volume_fqn "${{ secrets.TFY_VOLUME_FQN }}" \
-            --database_url "${{ secrets.DATABASE_URL }}" \
-            --secret_key "${{ secrets.SECRET_KEY }}"
+          pip install "truefoundry<1.0.0"
+
+      - name: Patch the commit sha
+        run: |
+          tfy patch-application --application-fqn ${{ env.APPLICATION_FQN }} --patch='{"image": {"build_source": {"ref": "${{ github.sha }}"}}}'
