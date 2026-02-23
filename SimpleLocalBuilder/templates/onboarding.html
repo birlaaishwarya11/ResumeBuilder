@@ -94,34 +94,6 @@
         .btn-success { background: #28a745; color: white; }
         .btn-success:hover { background: #218838; }
 
-        .divider {
-            text-align: center;
-            margin: 24px 0;
-            color: #999;
-            font-size: 0.85em;
-            position: relative;
-        }
-        .divider::before, .divider::after {
-            content: '';
-            position: absolute;
-            top: 50%;
-            width: 40%;
-            height: 1px;
-            background: #ddd;
-        }
-        .divider::before { left: 0; }
-        .divider::after { right: 0; }
-
-        .skip-link {
-            display: block;
-            text-align: center;
-            color: #007bff;
-            text-decoration: none;
-            font-size: 0.9em;
-            cursor: pointer;
-        }
-        .skip-link:hover { text-decoration: underline; }
-
         /* Review step */
         .review-container {
             display: none;
@@ -240,7 +212,7 @@
 <div id="upload-step" class="upload-container">
     <div class="upload-card">
         <h1>Welcome, {{ user.name }}!</h1>
-        <div class="subtitle">Upload an existing resume PDF to get started, or skip to build from scratch.</div>
+        <div class="subtitle">Upload your existing resume PDF to get started.</div>
 
         <label for="resume-pdf">Resume PDF</label>
         <input type="file" id="resume-pdf" accept=".pdf">
@@ -251,15 +223,19 @@
                 <summary style="cursor:pointer; font-size:0.9em; font-weight:600; color:#555;">Have an AI API key? (optional &mdash; improves accuracy)</summary>
                 <div style="margin-top:12px;">
                     <label style="margin-top:0;">AI Provider</label>
-                    <select id="ai-provider">
+                    <select id="ai-provider" onchange="updateModelDropdown()">
                         <option value="anthropic">Claude (Anthropic)</option>
                         <option value="openai">GPT (OpenAI)</option>
                         <option value="gemini">Gemini (Google)</option>
                     </select>
                     <label>API Key</label>
                     <input type="text" id="ai-api-key" placeholder="sk-... or your API key" style="font-size:0.85em;">
-                    <label>Model (optional)</label>
-                    <input type="text" id="ai-model" placeholder="Leave blank for default" style="font-size:0.85em;">
+                    <label>Model</label>
+                    <select id="ai-model" onchange="onModelChange()" style="font-size:0.85em;"></select>
+                    <div id="custom-model-container" style="display:none; margin-top:6px;">
+                        <label style="margin-top:0;">Model ID</label>
+                        <input type="text" id="custom-model-name" placeholder="e.g. claude-sonnet-4-6, gpt-4o, gemini-2.0-flash" style="font-size:0.85em;">
+                    </div>
                     <div class="file-note" style="margin-top:6px;">Providing an API key enables AI-powered parsing for more accurate results.</div>
                 </div>
             </details>
@@ -267,9 +243,6 @@
 
         <button id="parse-btn" class="btn btn-primary" style="width:100%; margin-top:20px;" disabled>Parse Resume</button>
 
-        <div class="divider">OR</div>
-
-        <a class="skip-link" id="skip-btn">Skip, start from scratch</a>
     </div>
 </div>
 
@@ -358,7 +331,7 @@
         if (apiKey) {
             formData.append('ai_provider', document.getElementById('ai-provider').value);
             formData.append('ai_api_key', apiKey);
-            formData.append('ai_model', document.getElementById('ai-model').value);
+            formData.append('ai_model', getSelectedModel());
         }
 
         fetch('/api/upload_resume', {
@@ -383,24 +356,6 @@
             btn.disabled = false;
             btn.textContent = 'Parse Resume';
             showToast('Parse failed: ' + err.message, 'error');
-        });
-    });
-
-    // Skip button
-    document.getElementById('skip-btn').addEventListener('click', function() {
-        if (!confirm('Start with an empty editor? You won\'t be able to upload a PDF later.')) return;
-
-        fetch('/api/skip_onboarding', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'}
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.status === 'success') {
-                window.location.href = '/';
-            } else {
-                showToast('Error: ' + data.message, 'error');
-            }
         });
     });
 
@@ -534,7 +489,7 @@
                 change_request: changeText,
                 ai_provider: document.getElementById('ai-provider').value,
                 ai_api_key: apiKey,
-                ai_model: document.getElementById('ai-model').value
+                ai_model: getSelectedModel()
             })
         })
         .then(function(r) { return r.json(); })
@@ -640,6 +595,60 @@
             showToast('Save failed: ' + err.message, 'error');
         });
     });
+
+    // Model dropdown
+    var PROVIDER_MODELS = {
+        'anthropic': [
+            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (Fastest)' },
+            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (Balanced)' },
+            { value: 'claude-opus-4-6', label: 'Claude Opus 4.6 (Most Capable)' },
+            { value: 'custom', label: 'Custom Model...' }
+        ],
+        'openai': [
+            { value: 'gpt-4o-mini', label: 'GPT-4o Mini (Fast & Affordable)' },
+            { value: 'gpt-4o', label: 'GPT-4o (Flagship)' },
+            { value: 'o3-mini', label: 'o3-mini (Reasoning)' },
+            { value: 'custom', label: 'Custom Model...' }
+        ],
+        'gemini': [
+            { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)' },
+            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Balanced)' },
+            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (Latest)' },
+            { value: 'custom', label: 'Custom Model...' }
+        ]
+    };
+
+    function updateModelDropdown() {
+        var provider = document.getElementById('ai-provider').value;
+        var modelSelect = document.getElementById('ai-model');
+        var models = PROVIDER_MODELS[provider] || [];
+        modelSelect.innerHTML = '';
+        models.forEach(function(m) {
+            var option = document.createElement('option');
+            option.value = m.value;
+            option.textContent = m.label;
+            modelSelect.appendChild(option);
+        });
+        document.getElementById('custom-model-container').style.display = 'none';
+        document.getElementById('custom-model-name').value = '';
+    }
+
+    function onModelChange() {
+        var model = document.getElementById('ai-model').value;
+        document.getElementById('custom-model-container').style.display =
+            model === 'custom' ? 'block' : 'none';
+    }
+
+    function getSelectedModel() {
+        var model = document.getElementById('ai-model').value;
+        if (model === 'custom') {
+            return document.getElementById('custom-model-name').value.trim();
+        }
+        return model;
+    }
+
+    // Initialise model dropdown on page load
+    updateModelDropdown();
 
     // Enter key triggers AI change apply
     document.getElementById('ai-change-input').addEventListener('keydown', function(e) {
