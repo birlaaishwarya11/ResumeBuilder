@@ -167,11 +167,14 @@ if __name__ == '__main__':
 def is_available():
     """Check if Daytona SDK is installed and an API key is configured."""
     if not DAYTONA_API_KEY:
+        print("[Daytona] DAYTONA_API_KEY not set — sandbox disabled")
         return False
     try:
         from daytona_sdk import Daytona  # noqa: F401
+        print(f"[Daytona] Available — API URL: {DAYTONA_API_URL}, Target: {DAYTONA_TARGET}")
         return True
     except ImportError:
+        print("[Daytona] daytona-sdk not installed — sandbox disabled")
         return False
 
 
@@ -277,9 +280,13 @@ def extract_text_in_sandbox(pdf_path):
                {"pages": [{"page": 1, "lines": [{"text": "...", "size": 14.0, "bold": true}]}]}
                or (None, []) if sandbox is unavailable or extraction fails.
     """
+    print(f"[Daytona] extract_text_in_sandbox called for: {pdf_path}")
     if not is_available():
         return None, ["Sandbox not available (no API key or SDK not installed)"]
-    return _run_in_sandbox(pdf_path, EXTRACTION_SCRIPT)
+    print("[Daytona] Starting sandbox extraction...")
+    result, logs = _run_in_sandbox(pdf_path, EXTRACTION_SCRIPT)
+    print(f"[Daytona] Extraction complete. Success: {result is not None}")
+    return result, logs
 
 
 def search_section_in_sandbox(pdf_path, section_hint):
