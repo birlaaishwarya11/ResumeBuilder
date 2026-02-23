@@ -140,6 +140,21 @@ def extract_lines_with_meta(pdf_path):
             if not chars:
                 continue
 
+            # Collect hyperlink annotations for this page: (top_y, uri)
+            page_height = page.height
+            link_positions = []
+            for h in (page.hyperlinks or []):
+                uri = h.get('uri', '')
+                if not uri:
+                    continue
+                if 'top' in h:
+                    top = h['top']
+                elif 'y1' in h:
+                    top = page_height - h['y1']
+                else:
+                    continue
+                link_positions.append((round(top, 1), uri))
+
             current_line_chars = []
             current_y = None
 
@@ -149,19 +164,19 @@ def extract_lines_with_meta(pdf_path):
                 y = round(ch['top'], 1)
                 if current_y is None or abs(y - current_y) > 3:
                     if current_line_chars:
-                        lines.append(_build_line(current_line_chars))
+                        lines.append(_build_line(current_line_chars, link_positions))
                     current_line_chars = [ch]
                     current_y = y
                 else:
                     current_line_chars.append(ch)
 
             if current_line_chars:
-                lines.append(_build_line(current_line_chars))
+                lines.append(_build_line(current_line_chars, link_positions))
 
     return lines
 
 
-def _build_line(chars):
+def _build_line(chars, link_positions=None):
     """Build a line dict from a list of character dicts, inserting spaces for gaps."""
     # Sort by x position
     chars = sorted(chars, key=lambda c: c['x0'])
@@ -179,6 +194,13 @@ def _build_line(chars):
         parts.append(ch['text'])
 
     text = ''.join(parts).strip()
+
+    # Append any hyperlink URIs whose y-position aligns with this line
+    if link_positions and chars:
+        line_top = round(chars[0]['top'], 1)
+        for link_top, uri in link_positions:
+            if abs(link_top - line_top) < 10 and uri not in text:
+                text = text + ' ' + uri
 
     sizes = [ch.get('size', 0) for ch in chars if ch['text'].strip()]
     avg_size = sum(sizes) / len(sizes) if sizes else 0
@@ -945,6 +967,22 @@ def extract_text_local(pdf_path):
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages, 1):
             chars = page.chars
+
+            # Collect hyperlink annotations for this page: (top_y, uri)
+            page_height = page.height
+            link_positions = []
+            for h in (page.hyperlinks or []):
+                uri = h.get('uri', '')
+                if not uri:
+                    continue
+                if 'top' in h:
+                    top = h['top']
+                elif 'y1' in h:
+                    top = page_height - h['y1']
+                else:
+                    continue
+                link_positions.append((round(top, 1), uri))
+
             if not chars:
                 text = page.extract_text()
                 if text:
@@ -974,7 +1012,7 @@ def extract_text_local(pdf_path):
 
             lines = []
             for line_chars in raw_lines:
-                built = _build_line(line_chars)
+                built = _build_line(line_chars, link_positions)
                 if built['text']:
                     lines.append(built)
 

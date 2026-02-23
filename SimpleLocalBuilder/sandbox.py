@@ -29,6 +29,22 @@ def extract(pdf_path):
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages, 1):
             chars = page.chars
+
+            # Collect hyperlink annotations: (top_y, uri)
+            page_height = page.height
+            link_positions = []
+            for h in (page.hyperlinks or []):
+                uri = h.get('uri', '')
+                if not uri:
+                    continue
+                if 'top' in h:
+                    top = h['top']
+                elif 'y1' in h:
+                    top = page_height - h['y1']
+                else:
+                    continue
+                link_positions.append((round(top, 1), uri))
+
             if not chars:
                 # Fallback: plain text extraction
                 text = page.extract_text()
@@ -70,6 +86,12 @@ def extract(pdf_path):
                 text = ''.join(parts).strip()
                 if not text:
                     continue
+                # Append any hyperlink URIs whose y-position aligns with this line
+                if link_positions and line_chars:
+                    line_top = round(line_chars[0]['top'], 1)
+                    for link_top, uri in link_positions:
+                        if abs(link_top - line_top) < 10 and uri not in text:
+                            text = text + ' ' + uri
                 sizes = [ch.get('size', 0) for ch in line_chars if ch['text'].strip()]
                 avg_size = sum(sizes) / len(sizes) if sizes else 10.0
                 fonts = [ch.get('fontname', '') for ch in line_chars if ch['text'].strip()]
