@@ -4,7 +4,7 @@ weasyprint
 flask
 anthropic
 openai
-google-generativeai
+google-genai
 language-tool-python
 pdfplumber
 daytona-sdk

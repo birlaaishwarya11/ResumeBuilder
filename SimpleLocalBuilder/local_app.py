@@ -1365,12 +1365,18 @@ def call_ai_provider(provider, api_key, system_prompt, user_message, model=None)
         return completion.choices[0].message.content
 
     elif provider == 'gemini':
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=api_key)
         model_name = model if model else 'gemini-1.5-flash'
-        model_instance = genai.GenerativeModel(model_name)
-        full_prompt = system_prompt + "\n\n" + user_message
-        response = model_instance.generate_content(full_prompt)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0,
+            )
+        )
         return response.text
 
     raise ValueError(f"Unknown provider: {provider}")
