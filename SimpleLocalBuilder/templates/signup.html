@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up - Resume Builder</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Left: scrollable info */
+        .info-pane {
+            flex: 1;
+            overflow-y: auto;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e0e0e0;
+            padding: 60px 48px;
+        }
+        .info-pane h1 {
+            font-size: 2.2em;
+            color: #fff;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+        .info-pane .tagline {
+            font-size: 1.1em;
+            color: #a0aec0;
+            margin-bottom: 48px;
+            line-height: 1.5;
+        }
+        .feature-section {
+            margin-bottom: 40px;
+        }
+        .feature-section h2 {
+            font-size: 1.1em;
+            color: #667eea;
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .feature-card {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 18px;
+        }
+        .feature-card .fc-icon {
+            font-size: 1.5em;
+            margin-bottom: 8px;
+        }
+        .feature-card h3 {
+            font-size: 0.92em;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+        .feature-card p {
+            font-size: 0.82em;
+            color: #a0aec0;
+            line-height: 1.5;
+        }
+        .how-it-works {
+            margin-top: 48px;
+        }
+        .how-it-works h2 {
+            font-size: 1.1em;
+            color: #667eea;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 700;
+        }
+        .step {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+        .step-num {
+            width: 32px;
+            height: 32px;
+            background: #667eea;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.85em;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .step-content h3 {
+            font-size: 0.92em;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .step-content p {
+            font-size: 0.82em;
+            color: #a0aec0;
+            line-height: 1.5;
+        }
+
+        /* Right: fixed form */
+        .form-pane {
+            width: 440px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 40px;
+            background: #fff;
+            border-left: 1px solid #e2e8f0;
+        }
+        .form-pane h1 {
+            font-size: 1.5em;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .form-pane .subtitle {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 24px;
+        }
+        .form-pane label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #555;
+            margin-bottom: 4px;
+            margin-top: 16px;
+        }
+        .form-pane input[type="text"],
+        .form-pane input[type="email"],
+        .form-pane input[type="password"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+        .form-pane input:focus { outline: none; border-color: #007bff; box-shadow: 0 0 0 2px rgba(0,123,255,0.15); }
+        .form-pane button {
+            width: 100%;
+            padding: 12px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 24px;
+        }
+        .form-pane button:hover { background: #0056b3; }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            margin-bottom: 16px;
+        }
+        .link {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .link a { color: #007bff; text-decoration: none; }
+        .link a:hover { text-decoration: underline; }
+
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            .info-pane { padding: 40px 24px; }
+            .form-pane { width: 100%; }
+            .feature-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Left: Product Info -->
+    <div class="info-pane">
+        <h1>Resume Builder</h1>
+        <div class="tagline">Build, edit, and tailor professional resumes with ease. Upload your existing PDF and get started in seconds.</div>
+
+        <div class="feature-section">
+            <h2>Features</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="fc-icon">&#128196;</div>
+                    <h3>PDF Auto-Parse</h3>
+                    <p>Upload your existing resume PDF and have it automatically parsed into an editable format with style preservation.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="fc-icon">&#9998;</div>
+                    <h3>Live Editor</h3>
+                    <p>Edit your resume content with a live side-by-side preview. See changes instantly as you type.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="fc-icon">&#128202;</div>
+                    <h3>ATS Match Scoring</h3>
+                    <p>Score your resume against job descriptions. Get keyword analysis and improvement suggestions powered by AI.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="fc-icon">&#128451;</div>
+                    <h3>Version History</h3>
+                    <p>Save multiple versions with keywords. Easily compare and restore any past version of your resume.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="fc-icon">&#127912;</div>
+                    <h3>Custom Styling</h3>
+                    <p>Adjust fonts, sizes, margins, line height, and accent colors. Your resume style is extracted from your PDF.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="fc-icon">&#128274;</div>
+                    <h3>Isolated Workspaces</h3>
+                    <p>Each user gets their own workspace. Your resume data, versions, and settings are completely private.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="how-it-works">
+            <h2>How It Works</h2>
+            <div class="step">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <h3>Create an Account</h3>
+                    <p>Sign up with your name, email, and password. Takes just a few seconds.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <h3>Upload Your Resume</h3>
+                    <p>Upload an existing PDF and our parser will extract content, sections, and styling automatically.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <h3>Review &amp; Edit</h3>
+                    <p>Fine-tune the parsed content in the YAML editor with live preview. Customize section names and header info.</p>
+                </div>
+            </div>
+            <div class="step">
+                <div class="step-num">4</div>
+                <div class="step-content">
+                    <h3>Download &amp; Apply</h3>
+                    <p>Export as a professionally formatted PDF. Use JD Match to tailor your resume for specific job postings.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Signup Form -->
+    <div class="form-pane">
+        <h1>Create Account</h1>
+        <div class="subtitle">Sign up to start building your resume</div>
+
+        {% if error %}
+        <div class="error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/signup">
+            <label for="name">Full Name</label>
+            <input type="text" id="name" name="name" required placeholder="Jane Doe">
+
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required placeholder="you@example.com">
+
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required placeholder="Min 6 characters" minlength="6">
+
+            <button type="submit">Create Account</button>
+        </form>
+
+        <div class="link">
+            Already have an account? <a href="/login">Sign in</a>
+        </div>
+    </div>
+</body>
+</html>

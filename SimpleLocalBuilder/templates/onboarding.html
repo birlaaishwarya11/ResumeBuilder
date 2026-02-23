@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup - Resume Builder</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.4.12/ace.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+        }
+
+        /* Toast */
+        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+        .toast {
+            padding: 12px 20px; border-radius: 8px; color: white; margin-bottom: 8px;
+            font-size: 0.9em; animation: toast-in 0.3s ease-out;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .toast-success { background: #27ae60; }
+        .toast-error { background: #e74c3c; }
+        .toast-info { background: #3498db; }
+        .toast.fade-out { animation: toast-out 0.3s ease-in forwards; }
+        @keyframes toast-in { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes toast-out { from { opacity:1; transform:translateX(0); } to { opacity:0; transform:translateX(60px); } }
+
+        /* Upload step */
+        .upload-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .upload-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            padding: 48px 40px;
+            width: 100%;
+            max-width: 520px;
+        }
+        .upload-card h1 {
+            font-size: 1.6em;
+            margin-bottom: 6px;
+            color: #333;
+        }
+        .upload-card .subtitle {
+            color: #666;
+            font-size: 0.95em;
+            margin-bottom: 28px;
+            line-height: 1.4;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            font-size: 0.85em;
+            color: #555;
+            margin-bottom: 4px;
+            margin-top: 16px;
+        }
+        input[type="text"], input[type="file"], select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+        input:focus, select:focus { outline: none; border-color: #007bff; }
+        .file-note {
+            font-size: 0.8em;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            cursor: pointer;
+            font-weight: 600;
+            text-align: center;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-primary:disabled { background: #a0c4e8; cursor: not-allowed; }
+        .btn-secondary { background: #f0f2f5; color: #333; border: 1px solid #ddd; }
+        .btn-secondary:hover { background: #e2e6ea; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #218838; }
+
+        .divider {
+            text-align: center;
+            margin: 24px 0;
+            color: #999;
+            font-size: 0.85em;
+            position: relative;
+        }
+        .divider::before, .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #ddd;
+        }
+        .divider::before { left: 0; }
+        .divider::after { right: 0; }
+
+        .skip-link {
+            display: block;
+            text-align: center;
+            color: #007bff;
+            text-decoration: none;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+        .skip-link:hover { text-decoration: underline; }
+
+        /* Review step */
+        .review-container {
+            display: none;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .review-header {
+            padding: 12px 20px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .review-header h2 { font-size: 1.1em; color: #333; }
+        .review-body {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .review-left, .review-right {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .review-left {
+            border-right: 1px solid #ddd;
+        }
+        .panel-label {
+            padding: 8px 16px;
+            background: #f8f9fa;
+            font-size: 0.8em;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #eee;
+        }
+        #yaml-editor {
+            flex: 1;
+            font-size: 14px;
+        }
+        #preview-frame {
+            flex: 1;
+            border: none;
+            width: 100%;
+            height: 100%;
+        }
+        .review-footer {
+            padding: 12px 20px;
+            background: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .review-footer .btn { min-width: 180px; }
+
+        /* Confidence bar */
+        .confidence-bar {
+            padding: 10px 16px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            font-size: 0.82em;
+        }
+        .confidence-bar .overall {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        .confidence-bar .score-pill {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 0.95em;
+        }
+        .score-high { background: #d4edda; color: #155724; }
+        .score-med  { background: #fff3cd; color: #856404; }
+        .score-low  { background: #f8d7da; color: #721c24; }
+        .confidence-issues {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .issue-chip {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+        .chip-missing { background: #f8d7da; color: #721c24; }
+        .chip-review  { background: #fff3cd; color: #856404; }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- Step 1: Upload -->
+<div id="upload-step" class="upload-container">
+    <div class="upload-card">
+        <h1>Welcome, {{ user.name }}!</h1>
+        <div class="subtitle">Upload an existing resume PDF to get started, or skip to build from scratch.</div>
+
+        <label for="resume-pdf">Resume PDF</label>
+        <input type="file" id="resume-pdf" accept=".pdf">
+        <div class="file-note">We'll extract content and styling from your PDF to pre-fill the editor.</div>
+
+        <div id="parse-options" style="display:none; margin-top:16px;">
+            <details id="ai-settings" style="padding:14px; background:#f8f9fa; border-radius:8px; border:1px solid #e9ecef;">
+                <summary style="cursor:pointer; font-size:0.9em; font-weight:600; color:#555;">Have an AI API key? (optional &mdash; improves accuracy)</summary>
+                <div style="margin-top:12px;">
+                    <label style="margin-top:0;">AI Provider</label>
+                    <select id="ai-provider">
+                        <option value="anthropic">Claude (Anthropic)</option>
+                        <option value="openai">GPT (OpenAI)</option>
+                        <option value="gemini">Gemini (Google)</option>
+                    </select>
+                    <label>API Key</label>
+                    <input type="text" id="ai-api-key" placeholder="sk-... or your API key" style="font-size:0.85em;">
+                    <label>Model (optional)</label>
+                    <input type="text" id="ai-model" placeholder="Leave blank for default" style="font-size:0.85em;">
+                    <div class="file-note" style="margin-top:6px;">Providing an API key enables AI-powered parsing for more accurate results.</div>
+                </div>
+            </details>
+        </div>
+
+        <button id="parse-btn" class="btn btn-primary" style="width:100%; margin-top:20px;" disabled>Parse Resume</button>
+
+        <div class="divider">OR</div>
+
+        <a class="skip-link" id="skip-btn">Skip, start from scratch</a>
+    </div>
+</div>
+
+<!-- Step 2: Review -->
+<div id="review-step" class="review-container">
+    <div class="review-header">
+        <h2>Review Parsed Resume</h2>
+        <span style="font-size:0.85em; color:#666;">Edit the YAML on the left. Preview updates automatically.</span>
+    </div>
+    <div id="confidence-bar" class="confidence-bar" style="display:none;"></div>
+    <div class="review-body">
+        <div class="review-left">
+            <div class="panel-label">YAML Editor</div>
+            <div id="yaml-editor" style="flex:1;"></div>
+            <!-- Missing section search -->
+            <div id="section-search" style="padding:10px 16px; background:#f8f9fa; border-top:1px solid #eee;">
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <span style="font-size:0.82em; color:#666; white-space:nowrap;">Missing something?</span>
+                    <input type="text" id="section-hint" placeholder="e.g. Awards, Certifications, Publications" style="flex:1; padding:6px 10px; font-size:0.85em;">
+                    <button id="search-section-btn" class="btn btn-primary" style="padding:6px 14px; font-size:0.85em;" onclick="searchSection()">Search</button>
+                </div>
+                <div id="search-result" style="display:none; margin-top:8px; padding:10px; background:#fff; border:1px solid #e9ecef; border-radius:6px; font-size:0.85em;">
+                    <div id="search-result-content"></div>
+                    <button id="add-to-yaml-btn" class="btn btn-success" style="margin-top:8px; padding:4px 12px; font-size:0.85em;" onclick="addSearchResultToYaml()">Add to YAML</button>
+                </div>
+            </div>
+        </div>
+        <div class="review-right">
+            <div class="panel-label">Preview</div>
+            <iframe id="preview-frame"></iframe>
+        </div>
+    </div>
+    <!-- AI Change Request Bar -->
+    <div id="ai-change-bar" style="padding:10px 20px; background:#f8f9fa; border-top:1px solid #eee; display:none;">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:0.82em; color:#666; white-space:nowrap;">AI Edit:</span>
+            <input type="text" id="ai-change-input" placeholder="e.g. Merge skills and certifications, reorder sections, fix formatting..." style="flex:1; padding:7px 12px; font-size:0.85em; border:1px solid #ddd; border-radius:6px;">
+            <button id="ai-change-btn" class="btn btn-primary" style="padding:7px 16px; font-size:0.85em; white-space:nowrap;" onclick="applyAIChange()">Apply</button>
+        </div>
+        <div class="file-note" style="margin-top:4px;">Requires an AI API key (set in the upload step). Describe what you want to change.</div>
+    </div>
+    <div class="review-footer">
+        <button id="reupload-btn" class="btn btn-secondary">Re-upload Different PDF</button>
+        <button id="confirm-btn" class="btn btn-success">Confirm &amp; Continue</button>
+    </div>
+</div>
+
+<script>
+    var parsedData = null;
+    var yamlEditor = null;
+    var previewTimeout = null;
+
+    function showToast(message, type) {
+        var container = document.getElementById('toast-container');
+        var toast = document.createElement('div');
+        toast.className = 'toast toast-' + (type || 'info');
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(function() {
+            toast.classList.add('fade-out');
+            setTimeout(function() { toast.remove(); }, 300);
+        }, 3000);
+    }
+
+    // Show/hide parse options when file selected
+    document.getElementById('resume-pdf').addEventListener('change', function() {
+        var hasFile = this.files.length > 0;
+        document.getElementById('parse-options').style.display = hasFile ? 'block' : 'none';
+        document.getElementById('parse-btn').disabled = !hasFile;
+    });
+
+    // Parse button
+    document.getElementById('parse-btn').addEventListener('click', function() {
+        var fileInput = document.getElementById('resume-pdf');
+        if (!fileInput.files.length) return;
+
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Parsing...';
+
+        var formData = new FormData();
+        formData.append('resume_pdf', fileInput.files[0]);
+
+        // Include AI settings if provided
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (apiKey) {
+            formData.append('ai_provider', document.getElementById('ai-provider').value);
+            formData.append('ai_api_key', apiKey);
+            formData.append('ai_model', document.getElementById('ai-model').value);
+        }
+
+        fetch('/api/upload_resume', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Parse Resume';
+            if (data.status === 'success') {
+                parsedData = data;
+                showReviewStep();
+                var source = data.extraction_source === 'sandbox' ? ' (via sandbox)' : '';
+                var mode = data.raw_text ? (apiKey ? 'AI' : 'heuristic') : '';
+                showToast('PDF parsed successfully' + source + '!', 'success');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Parse Resume';
+            showToast('Parse failed: ' + err.message, 'error');
+        });
+    });
+
+    // Skip button
+    document.getElementById('skip-btn').addEventListener('click', function() {
+        if (!confirm('Start with an empty editor? You won\'t be able to upload a PDF later.')) return;
+
+        fetch('/api/skip_onboarding', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                window.location.href = '/';
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        });
+    });
+
+    // Render confidence bar
+    function renderConfidence(confidence) {
+        var bar = document.getElementById('confidence-bar');
+        if (!confidence || confidence.overall === undefined) {
+            bar.style.display = 'none';
+            return;
+        }
+        bar.style.display = 'block';
+
+        var pct = Math.round(confidence.overall * 100);
+        var cls = pct >= 70 ? 'score-high' : pct >= 40 ? 'score-med' : 'score-low';
+
+        var html = '<div class="overall">';
+        html += '<span>Parse confidence:</span>';
+        html += '<span class="score-pill ' + cls + '">' + pct + '%</span>';
+        html += '</div>';
+
+        var chips = [];
+        (confidence.missing || []).forEach(function(f) {
+            chips.push('<span class="issue-chip chip-missing">' + f.replace('contact.', '') + ' missing</span>');
+        });
+        (confidence.low_confidence || []).forEach(function(f) {
+            if ((confidence.missing || []).indexOf(f) === -1) {
+                chips.push('<span class="issue-chip chip-review">' + f.replace('contact.', '') + ' needs review</span>');
+            }
+        });
+
+        if (chips.length) {
+            html += '<div class="confidence-issues">' + chips.join('') + '</div>';
+        }
+
+        bar.innerHTML = html;
+    }
+
+    // Section search
+    var lastSearchSnippet = '';
+    function searchSection() {
+        var hint = document.getElementById('section-hint').value.trim();
+        if (!hint) { showToast('Enter a section name to search for.', 'error'); return; }
+
+        var btn = document.getElementById('search-section-btn');
+        btn.disabled = true;
+        btn.textContent = 'Searching...';
+
+        fetch('/api/search_section', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({section_hint: hint})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Search';
+
+            if (data.status === 'found') {
+                lastSearchSnippet = data.yaml_snippet;
+                var resultDiv = document.getElementById('search-result');
+                var contentDiv = document.getElementById('search-result-content');
+                contentDiv.innerHTML = '<strong>Found: ' + data.heading + '</strong><pre style="margin:6px 0 0; font-size:0.9em; max-height:120px; overflow:auto; background:#f8f9fa; padding:8px; border-radius:4px;">' +
+                    data.yaml_snippet.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+                resultDiv.style.display = 'block';
+
+                // Store custom section info for later
+                if (data.section_key && parsedData) {
+                    parsedData._pending_section = {
+                        key: data.section_key,
+                        display_name: data.display_name || data.heading,
+                        render_type: data.render_type || 'bullets'
+                    };
+                }
+
+                showToast('Found "' + data.heading + '" section!', 'success');
+            } else {
+                document.getElementById('search-result').style.display = 'none';
+                showToast(data.message || 'Section not found.', 'info');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Search';
+            showToast('Search failed: ' + err.message, 'error');
+        });
+    }
+
+    function addSearchResultToYaml() {
+        if (!lastSearchSnippet || !yamlEditor) return;
+        var current = yamlEditor.getValue();
+        var newContent = current.trimEnd() + '\n\n' + lastSearchSnippet;
+        yamlEditor.setValue(newContent, -1);
+
+        // Add to custom_sections if not already there
+        if (parsedData && parsedData._pending_section) {
+            var sec = parsedData._pending_section;
+            if (!parsedData.custom_sections) parsedData.custom_sections = [];
+            var exists = parsedData.custom_sections.some(function(s) { return s.key === sec.key; });
+            if (!exists) {
+                parsedData.custom_sections.push(sec);
+            }
+            delete parsedData._pending_section;
+        }
+
+        document.getElementById('search-result').style.display = 'none';
+        document.getElementById('section-hint').value = '';
+        lastSearchSnippet = '';
+        showToast('Section added to your resume!', 'success');
+    }
+
+    // AI Change Request
+    function applyAIChange() {
+        var changeText = document.getElementById('ai-change-input').value.trim();
+        if (!changeText) { showToast('Enter what you want to change.', 'error'); return; }
+
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (!apiKey) {
+            showToast('An AI API key is required. Expand the AI section in the upload step.', 'error');
+            return;
+        }
+
+        var btn = document.getElementById('ai-change-btn');
+        btn.disabled = true;
+        btn.textContent = 'Applying...';
+
+        fetch('/api/ai_change_request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                yaml: yamlEditor.getValue(),
+                change_request: changeText,
+                ai_provider: document.getElementById('ai-provider').value,
+                ai_api_key: apiKey,
+                ai_model: document.getElementById('ai-model').value
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Apply';
+            if (data.status === 'success') {
+                yamlEditor.setValue(data.yaml, -1);
+                document.getElementById('ai-change-input').value = '';
+                showToast('Changes applied!', 'success');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Apply';
+            showToast('Failed: ' + err.message, 'error');
+        });
+    }
+
+    // Show review step
+    function showReviewStep() {
+        document.getElementById('upload-step').style.display = 'none';
+        document.getElementById('review-step').style.display = 'flex';
+
+        if (!yamlEditor) {
+            yamlEditor = ace.edit('yaml-editor');
+            yamlEditor.setTheme('ace/theme/chrome');
+            yamlEditor.session.setMode('ace/mode/yaml');
+            yamlEditor.setOptions({
+                fontSize: '14px',
+                showPrintMargin: false,
+                wrap: true
+            });
+            yamlEditor.session.on('change', function() {
+                clearTimeout(previewTimeout);
+                previewTimeout = setTimeout(updatePreview, 800);
+            });
+        }
+
+        yamlEditor.setValue(parsedData.yaml, -1);
+
+        renderConfidence(parsedData.confidence);
+
+        // Show AI change bar if API key was provided
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (apiKey) {
+            document.getElementById('ai-change-bar').style.display = 'block';
+        }
+
+        updatePreview();
+    }
+
+    // Re-upload button
+    document.getElementById('reupload-btn').addEventListener('click', function() {
+        document.getElementById('review-step').style.display = 'none';
+        document.getElementById('upload-step').style.display = 'flex';
+        parsedData = null;
+        document.getElementById('resume-pdf').value = '';
+        document.getElementById('parse-btn').disabled = true;
+        document.getElementById('parse-options').style.display = 'none';
+        document.getElementById('search-result').style.display = 'none';
+        document.getElementById('section-hint').value = '';
+        lastSearchSnippet = '';
+    });
+
+    // Confirm button
+    document.getElementById('confirm-btn').addEventListener('click', function() {
+        if (!confirm('Once confirmed, you won\'t be able to change the structure of the resume. Click OK to continue or Cancel to keep editing.')) return;
+
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Saving...';
+
+        var yamlContent = yamlEditor.getValue();
+
+        fetch('/api/complete_onboarding', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resume: yamlContent,
+                header: parsedData.header,
+                style: parsedData.style,
+                custom_sections: parsedData.custom_sections,
+                section_names: parsedData.section_names
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                showToast('Setup complete! Redirecting...', 'success');
+                setTimeout(function() { window.location.href = '/'; }, 1000);
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Confirm & Continue';
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Confirm & Continue';
+            showToast('Save failed: ' + err.message, 'error');
+        });
+    });
+
+    // Enter key triggers AI change apply
+    document.getElementById('ai-change-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyAIChange(); }
+    });
+
+    // Preview update
+    function updatePreview() {
+        if (!parsedData || !yamlEditor) return;
+
+        var yamlContent = yamlEditor.getValue();
+
+        fetch('/api/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resume: yamlContent,
+                style: parsedData.style,
+                header: parsedData.header,
+                section_names: parsedData.section_names,
+                custom_sections: parsedData.custom_sections
+            })
+        })
+        .then(function(r) { return r.text(); })
+        .then(function(html) {
+            var iframe = document.getElementById('preview-frame');
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+        })
+        .catch(function(err) {
+            console.error('Preview error:', err);
+        });
+    }
+</script>
+</body>
+</html>

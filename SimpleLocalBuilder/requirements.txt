@@ -1,0 +1,12 @@
+pyyaml
+jinja2
+weasyprint
+flask
+anthropic
+openai
+google-generativeai
+language-tool-python
+pdfplumber
+daytona-sdk
+psycopg2-binary
+gunicorn
