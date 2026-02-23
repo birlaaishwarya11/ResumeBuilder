@@ -243,6 +243,23 @@
 
         <button id="parse-btn" class="btn btn-primary" style="width:100%; margin-top:20px;" disabled>Parse Resume</button>
 
+        <!-- AI error panel (shown when AI key fails) -->
+        <div id="ai-error-panel" style="display:none; margin-top:16px; padding:14px 16px; background:#fff3cd; border:1px solid #ffc107; border-radius:8px;">
+            <div style="display:flex; align-items:flex-start; gap:10px;">
+                <span style="font-size:1.2em; flex-shrink:0;">&#9888;</span>
+                <div style="flex:1;">
+                    <div style="font-weight:600; font-size:0.9em; color:#856404; margin-bottom:4px;">
+                        AI parsing failed <span id="ai-error-code" style="font-weight:700;"></span>
+                    </div>
+                    <div id="ai-error-msg" style="font-size:0.82em; color:#6b5700; word-break:break-word; margin-bottom:10px;"></div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn btn-secondary" style="font-size:0.82em; padding:6px 14px;" onclick="dismissAiError()">Fix Key / Model &amp; Retry</button>
+                        <button class="btn btn-success" style="font-size:0.82em; padding:6px 14px;" onclick="continueWithHeuristic()">Continue with Basic Parser</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -346,8 +363,11 @@
                 parsedData = data;
                 showReviewStep();
                 var source = data.extraction_source === 'sandbox' ? ' (via sandbox)' : '';
-                var mode = data.raw_text ? (apiKey ? 'AI' : 'heuristic') : '';
                 showToast('PDF parsed successfully' + source + '!', 'success');
+            } else if (data.status === 'ai_parse_failed') {
+                // AI key/model failed — keep heuristic result ready, show error panel
+                parsedData = data;
+                showAiError(data.ai_error, data.ai_status_code);
             } else {
                 showToast('Error: ' + data.message, 'error');
             }
@@ -358,6 +378,28 @@
             showToast('Parse failed: ' + err.message, 'error');
         });
     });
+
+    // AI error panel helpers
+    function showAiError(message, statusCode) {
+        var panel = document.getElementById('ai-error-panel');
+        var codeEl = document.getElementById('ai-error-code');
+        var msgEl = document.getElementById('ai-error-msg');
+        codeEl.textContent = statusCode ? '(' + statusCode + ')' : '';
+        msgEl.textContent = message || 'An unknown error occurred with the AI provider.';
+        panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function dismissAiError() {
+        document.getElementById('ai-error-panel').style.display = 'none';
+        parsedData = null;
+    }
+
+    function continueWithHeuristic() {
+        document.getElementById('ai-error-panel').style.display = 'none';
+        showReviewStep();
+        showToast('Continuing with basic parser result.', 'info');
+    }
 
     // Render confidence bar
     function renderConfidence(confidence) {
@@ -552,6 +594,7 @@
         document.getElementById('resume-pdf').value = '';
         document.getElementById('parse-btn').disabled = true;
         document.getElementById('parse-options').style.display = 'none';
+        document.getElementById('ai-error-panel').style.display = 'none';
         document.getElementById('search-result').style.display = 'none';
         document.getElementById('section-hint').value = '';
         lastSearchSnippet = '';
