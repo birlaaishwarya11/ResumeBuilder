@@ -15,7 +15,7 @@ from models import (
     is_onboarding_complete, mark_onboarding_complete,
     DEFAULT_SECTION_NAMES, DATA_DIR
 )
-from pdf_parser import (parse_resume_pdf, extract_style_from_pdf,
+from pdf_parser import (extract_style_from_pdf,
                         extract_text_local, parse_resume_from_extracted,
                         _smart_parse_section, _normalize_section_key)
 from confidence import score_parsed_resume
@@ -150,34 +150,6 @@ def _build_raw_text(extracted_data):
             if text:
                 parts.append(text)
     return '\n'.join(parts)
-
-
-def _ai_parse_resume(pdf_path, provider, api_key, model=None):
-    """Use an AI provider to parse a resume PDF into structured data.
-    Two-phase approach:
-      Phase 1 - Discover the resume's unique structure (sections + types)
-      Phase 2 - Extract all data using the discovered schema
-    Works for any resume type: engineering, academic, creative, legal, medical, etc.
-    """
-    import pdfplumber
-
-    # Extract raw text from PDF
-    text_lines = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                text_lines.append(text)
-    raw_text = '\n'.join(text_lines)
-
-    if not raw_text.strip():
-        return {}
-
-    try:
-        return _ai_parse_two_phase(raw_text, provider, api_key, model)
-    except Exception as e:
-        print(f"Two-phase AI parse failed ({e}), falling back to single-phase")
-        return _ai_parse_single_phase(raw_text, provider, api_key, model)
 
 
 def _ai_parse_two_phase(raw_text, provider, api_key, model=None):

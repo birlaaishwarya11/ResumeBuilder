@@ -131,51 +131,6 @@ LOCATION_TAIL_RE = re.compile(
 BULLET_CHARS = {'•', '▪', '■', '◦', '►', '‣', '▸'}
 
 
-def extract_lines_with_meta(pdf_path):
-    """Extract text lines with font size and bold info from PDF."""
-    lines = []
-    with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
-            chars = page.chars
-            if not chars:
-                continue
-
-            # Collect hyperlink annotations for this page: (top_y, uri)
-            page_height = page.height
-            link_positions = []
-            for h in (page.hyperlinks or []):
-                uri = h.get('uri', '')
-                if not uri:
-                    continue
-                if 'top' in h:
-                    top = h['top']
-                elif 'y1' in h:
-                    top = page_height - h['y1']
-                else:
-                    continue
-                link_positions.append((round(top, 1), uri))
-
-            current_line_chars = []
-            current_y = None
-
-            sorted_chars = sorted(chars, key=lambda c: (round(c['top'], 1), c['x0']))
-
-            for ch in sorted_chars:
-                y = round(ch['top'], 1)
-                if current_y is None or abs(y - current_y) > 3:
-                    if current_line_chars:
-                        lines.append(_build_line(current_line_chars, link_positions))
-                    current_line_chars = [ch]
-                    current_y = y
-                else:
-                    current_line_chars.append(ch)
-
-            if current_line_chars:
-                lines.append(_build_line(current_line_chars, link_positions))
-
-    return lines
-
-
 def _build_line(chars, link_positions=None):
     """Build a line dict from a list of character dicts, inserting spaces for gaps."""
     # Sort by x position
@@ -1176,12 +1131,3 @@ def parse_resume_from_extracted(extracted_data):
     return _parse_from_lines(all_lines)
 
 
-def parse_resume_pdf(pdf_path):
-    """
-    Main entry point: parse a resume PDF into a structured dict.
-    Returns a dict matching the YAML structure used by the resume template.
-    """
-    lines = extract_lines_with_meta(pdf_path)
-    if not lines:
-        return {}
-    return _parse_from_lines(lines)
