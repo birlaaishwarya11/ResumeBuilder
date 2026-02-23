@@ -400,6 +400,8 @@
 <div style="position:fixed; top:0; left:0; right:0; z-index:500;">
     <div class="top-nav">
         <span class="app-title">Resume Builder</span>
+        <div style="display:flex; align-items:center; gap:12px;">
+            <button onclick="openFeedback()" style="background:transparent; border:1px solid rgba(255,255,255,0.2); color:#eee; padding:4px 12px; border-radius:16px; font-size:0.8em; cursor:pointer;">Feedback</button>
         <div class="user-menu-wrapper">
             <button class="user-menu-trigger" onclick="toggleUserMenu()">
                 <span class="user-avatar">{{ user.name[0] if user.name else '?' }}</span>
@@ -425,6 +427,7 @@
                 </a>
             </div>
         </div>
+        </div>
     </div>
 </div>
 
@@ -437,19 +440,15 @@
         <button onclick="downloadPDF()" style="background: #28a745;">Download PDF</button>
     </div>
     <div class="controls">
-        <details open>
-            <summary style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                <span><strong>Header (from Settings)</strong></span>
-                <div style="display:flex; gap:10px;">
-                    <span title="Check Grammar" onclick="event.preventDefault(); event.stopPropagation(); checkGrammar()" style="cursor:pointer; font-size:1.2em;">&#x1F4DD;</span>
-                    <span title="Live View" onclick="event.preventDefault(); event.stopPropagation(); openLiveView()" style="cursor:pointer; font-size:1.2em;">&#x1F441;&#xFE0F;</span>
-                    <span title="Toggle Wrap" onclick="event.preventDefault(); event.stopPropagation(); toggleWrap()" style="cursor:pointer; font-size:1.2em;">&#x21A9;&#xFE0F;</span>
-                </div>
-            </summary>
-            <div id="header-preview" style="background: #e9ecef; padding: 10px; border: 1px solid #ccc; font-size: 0.85em; font-family: monospace; color: #555; white-space: pre-wrap; margin-top:5px; border-radius:6px;"></div>
-        </details>
+        <div style="display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:4px 0;">
+            <!-- Grammar check commented out for now -->
+            <!-- <span title="Check Grammar" onclick="checkGrammar()" style="cursor:pointer; font-size:1.2em;">&#x1F4DD;</span> -->
+            <span title="Live View" onclick="openLiveView()" style="cursor:pointer; font-size:1.2em;">&#x1F441;&#xFE0F;</span>
+            <span title="Toggle Wrap" onclick="toggleWrap()" style="cursor:pointer; font-size:1.2em;">&#x21A9;&#xFE0F;</span>
+        </div>
+        <div id="header-preview" style="display:none;"></div>
 
-        <details style="margin-top:10px;">
+        <details>
             <summary>Styling Options</summary>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px 0;">
                 <label>Font: <select id="font-family" onchange="updatePreview()">
@@ -485,7 +484,7 @@
     </div>
 </div>
 
-<!-- Grammar Check Modal -->
+<!-- Grammar Check Modal (commented out for now)
 <div id="grammar-check-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; justify-content:center; align-items:center;">
     <div style="background:white; width:600px; max-height:80%; display:flex; flex-direction:column; border-radius:8px; box-shadow:0 0 20px rgba(0,0,0,0.5);">
         <div style="padding:15px; display:flex; justify-content:space-between; border-bottom:1px solid #ccc; align-items:center;">
@@ -500,6 +499,7 @@
         </div>
     </div>
 </div>
+-->
 
 <div class="pane right-pane" style="margin-top: 44px;">
     <div class="preview-container">
@@ -1530,6 +1530,37 @@
         document.getElementById('grammar-check-modal').style.display = 'none';
     }
 
+    // --- Feedback ---
+    function openFeedback() {
+        document.getElementById('feedback-modal').style.display = 'flex';
+        document.getElementById('feedback-text').value = '';
+    }
+    function closeFeedback() {
+        document.getElementById('feedback-modal').style.display = 'none';
+    }
+    function submitFeedback() {
+        var text = document.getElementById('feedback-text').value.trim();
+        if (!text) { showToast('Please enter your feedback.', 'error'); return; }
+
+        fetch('/api/feedback', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ feedback: text })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                showToast(data.message, 'success');
+                closeFeedback();
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            showToast('Error: ' + err.message, 'error');
+        });
+    }
+
     // --- Delete Profile ---
     function showDeleteProfile() {
         document.getElementById('delete-profile-modal').style.display = 'flex';
@@ -1578,6 +1609,21 @@
         });
     }
 </script>
+
+<!-- Feedback Modal -->
+<div id="feedback-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:3000; justify-content:center; align-items:center;">
+    <div style="background:white; width:440px; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.2); overflow:hidden;">
+        <div style="padding:20px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">Send Feedback</h3>
+            <span onclick="closeFeedback()" style="cursor:pointer; font-size:1.4em; color:#999;">&times;</span>
+        </div>
+        <div style="padding:24px;">
+            <p style="color:#666; margin-top:0; font-size:0.9em;">Help us improve! Share your thoughts, report bugs, or suggest features.</p>
+            <textarea id="feedback-text" rows="5" placeholder="Your feedback..." style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:6px; font-size:0.9em; resize:vertical;"></textarea>
+            <button onclick="submitFeedback()" style="width:100%; margin-top:14px; background:#007bff; padding:10px; border-radius:6px; font-weight:600;">Submit Feedback</button>
+        </div>
+    </div>
+</div>
 
 <!-- Delete Profile Modal -->
 <div id="delete-profile-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:3000; justify-content:center; align-items:center;">

@@ -8,3 +8,5 @@ google-generativeai
 language-tool-python
 pdfplumber
 daytona-sdk
+psycopg2-binary
+gunicorn

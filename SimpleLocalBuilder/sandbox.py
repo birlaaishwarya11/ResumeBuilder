@@ -194,25 +194,34 @@ def _run_in_sandbox(pdf_path, script_code, extra_args=''):
         extra_args: Additional CLI arguments appended after the PDF path.
 
     Returns:
-        dict: Parsed JSON output from the script, or None on failure.
+        tuple: (result_dict, logs_list) where result_dict is parsed JSON output
+               or None on failure, and logs_list is a list of log strings.
     """
     from daytona_sdk import CreateSandboxFromSnapshotParams
 
     daytona = _get_daytona()
     sandbox = None
+    logs = []
 
     try:
+        logs.append("Creating sandbox...")
         sandbox = daytona.create(CreateSandboxFromSnapshotParams(language='python'))
+        logs.append(f"Sandbox created (id: {getattr(sandbox, 'id', 'unknown')})")
 
         # Install pdfplumber
+        logs.append("Installing pdfplumber...")
         sandbox.process.exec('pip install -q pdfplumber')
+        logs.append("pdfplumber installed")
 
         # Upload the PDF
+        logs.append("Uploading PDF to sandbox...")
         with open(pdf_path, 'rb') as f:
             pdf_bytes = f.read()
         sandbox.fs.upload_file(pdf_bytes, '/tmp/resume.pdf')
+        logs.append(f"PDF uploaded ({len(pdf_bytes)} bytes)")
 
         # Upload and run the script
+        logs.append("Running extraction script...")
         sandbox.fs.upload_file(script_code.encode(), '/tmp/script.py')
         cmd = f'python3 /tmp/script.py /tmp/resume.pdf {extra_args}'.strip()
         response = sandbox.process.exec(cmd)
@@ -221,30 +230,40 @@ def _run_in_sandbox(pdf_path, script_code, extra_args=''):
         output = response.result if hasattr(response, 'result') else str(response)
 
         if exit_code and exit_code != 0:
-            print(f"Sandbox script exited with code {exit_code}: {output[:500]}")
-            return None
+            logs.append(f"Script exited with code {exit_code}: {output[:200]}")
+            return None, logs
 
         if not output or not output.strip():
-            print("Sandbox script produced no output")
-            return None
+            logs.append("Script produced no output")
+            return None, logs
+
+        logs.append("Script completed, parsing output...")
 
         # Extract JSON from output (skip pip noise lines)
         for line in reversed(output.strip().splitlines()):
             line = line.strip()
             if line.startswith('{'):
-                return json.loads(line)
+                result = json.loads(line)
+                page_count = len(result.get('pages', []))
+                line_count = sum(len(p.get('lines', [])) for p in result.get('pages', []))
+                logs.append(f"Extracted {line_count} lines from {page_count} page(s)")
+                return result, logs
 
-        return json.loads(output.strip())
+        result = json.loads(output.strip())
+        logs.append("Output parsed successfully")
+        return result, logs
 
     except Exception as e:
-        print(f"Sandbox execution failed: {e}")
-        return None
+        logs.append(f"Error: {e}")
+        return None, logs
     finally:
         if sandbox:
             try:
+                logs.append("Cleaning up sandbox...")
                 daytona.delete(sandbox)
+                logs.append("Sandbox deleted")
             except Exception:
-                pass
+                logs.append("Warning: sandbox cleanup failed")
 
 
 def extract_text_in_sandbox(pdf_path):
@@ -254,11 +273,12 @@ def extract_text_in_sandbox(pdf_path):
         pdf_path: Local path to the PDF file.
 
     Returns:
-        dict: {"pages": [{"page": 1, "lines": [{"text": "...", "size": 14.0, "bold": true}]}]}
-              or None if sandbox is unavailable or extraction fails.
+        tuple: (result_dict, logs_list) where result_dict has
+               {"pages": [{"page": 1, "lines": [{"text": "...", "size": 14.0, "bold": true}]}]}
+               or (None, []) if sandbox is unavailable or extraction fails.
     """
     if not is_available():
-        return None
+        return None, ["Sandbox not available (no API key or SDK not installed)"]
     return _run_in_sandbox(pdf_path, EXTRACTION_SCRIPT)
 
 
@@ -270,12 +290,13 @@ def search_section_in_sandbox(pdf_path, section_hint):
         section_hint: Section name to search for (e.g., "Awards", "Publications").
 
     Returns:
-        dict: {"found": true, "heading": "...", "lines": [...]} or {"found": false}
+        tuple: (result_dict, logs_list) where result_dict is
+               {"found": true, "heading": "...", "lines": [...]} or {"found": false}
     """
     if not is_available():
-        return {"found": False}
+        return {"found": False}, ["Sandbox not available"]
 
     # Shell-escape the hint
     safe_hint = section_hint.replace("'", "'\\''")
-    result = _run_in_sandbox(pdf_path, SEARCH_SCRIPT, f"'{safe_hint}'")
-    return result if result else {"found": False}
+    result, logs = _run_in_sandbox(pdf_path, SEARCH_SCRIPT, f"'{safe_hint}'")
+    return (result if result else {"found": False}), logs

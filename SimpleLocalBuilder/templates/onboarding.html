@@ -217,25 +217,6 @@
         .chip-missing { background: #f8d7da; color: #721c24; }
         .chip-review  { background: #fff3cd; color: #856404; }
 
-        /* Tabs */
-        .tab-btn {
-            padding: 8px 16px;
-            border: none;
-            background: transparent;
-            font-size: 0.82em;
-            font-weight: 600;
-            color: #888;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            border-bottom: 2px solid transparent;
-        }
-        .tab-btn:hover { color: #333; }
-        .tab-active {
-            color: #007bff;
-            border-bottom-color: #007bff;
-        }
-
         /* Spinner */
         .spinner {
             display: inline-block;
@@ -301,12 +282,8 @@
     <div id="confidence-bar" class="confidence-bar" style="display:none;"></div>
     <div class="review-body">
         <div class="review-left">
-            <div style="display:flex; border-bottom:1px solid #eee; background:#f8f9fa;">
-                <button id="tab-yaml" class="tab-btn tab-active" onclick="switchTab('yaml')">YAML Editor</button>
-                <button id="tab-rawtext" class="tab-btn" onclick="switchTab('rawtext')">Raw Text</button>
-            </div>
+            <div class="panel-label">YAML Editor</div>
             <div id="yaml-editor" style="flex:1;"></div>
-            <pre id="raw-text-view" style="display:none; flex:1; overflow:auto; padding:12px 16px; margin:0; font-size:13px; line-height:1.5; background:#fff; white-space:pre-wrap; word-wrap:break-word;"></pre>
             <!-- Missing section search -->
             <div id="section-search" style="padding:10px 16px; background:#f8f9fa; border-top:1px solid #eee;">
                 <div style="display:flex; gap:8px; align-items:center;">
@@ -324,6 +301,15 @@
             <div class="panel-label">Preview</div>
             <iframe id="preview-frame"></iframe>
         </div>
+    </div>
+    <!-- AI Change Request Bar -->
+    <div id="ai-change-bar" style="padding:10px 20px; background:#f8f9fa; border-top:1px solid #eee; display:none;">
+        <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-size:0.82em; color:#666; white-space:nowrap;">AI Edit:</span>
+            <input type="text" id="ai-change-input" placeholder="e.g. Merge skills and certifications, reorder sections, fix formatting..." style="flex:1; padding:7px 12px; font-size:0.85em; border:1px solid #ddd; border-radius:6px;">
+            <button id="ai-change-btn" class="btn btn-primary" style="padding:7px 16px; font-size:0.85em; white-space:nowrap;" onclick="applyAIChange()">Apply</button>
+        </div>
+        <div class="file-note" style="margin-top:4px;">Requires an AI API key (set in the upload step). Describe what you want to change.</div>
     </div>
     <div class="review-footer">
         <button id="reupload-btn" class="btn btn-secondary">Re-upload Different PDF</button>
@@ -452,27 +438,6 @@
         bar.innerHTML = html;
     }
 
-    // Tab switching
-    function switchTab(tab) {
-        var yamlEl = document.getElementById('yaml-editor');
-        var rawEl = document.getElementById('raw-text-view');
-        var tabYaml = document.getElementById('tab-yaml');
-        var tabRaw = document.getElementById('tab-rawtext');
-
-        if (tab === 'yaml') {
-            yamlEl.style.display = 'block';
-            rawEl.style.display = 'none';
-            tabYaml.classList.add('tab-active');
-            tabRaw.classList.remove('tab-active');
-            if (yamlEditor) yamlEditor.resize();
-        } else {
-            yamlEl.style.display = 'none';
-            rawEl.style.display = 'block';
-            tabYaml.classList.remove('tab-active');
-            tabRaw.classList.add('tab-active');
-        }
-    }
-
     // Section search
     var lastSearchSnippet = '';
     function searchSection() {
@@ -546,6 +511,51 @@
         showToast('Section added to your resume!', 'success');
     }
 
+    // AI Change Request
+    function applyAIChange() {
+        var changeText = document.getElementById('ai-change-input').value.trim();
+        if (!changeText) { showToast('Enter what you want to change.', 'error'); return; }
+
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (!apiKey) {
+            showToast('An AI API key is required. Expand the AI section in the upload step.', 'error');
+            return;
+        }
+
+        var btn = document.getElementById('ai-change-btn');
+        btn.disabled = true;
+        btn.textContent = 'Applying...';
+
+        fetch('/api/ai_change_request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                yaml: yamlEditor.getValue(),
+                change_request: changeText,
+                ai_provider: document.getElementById('ai-provider').value,
+                ai_api_key: apiKey,
+                ai_model: document.getElementById('ai-model').value
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Apply';
+            if (data.status === 'success') {
+                yamlEditor.setValue(data.yaml, -1);
+                document.getElementById('ai-change-input').value = '';
+                showToast('Changes applied!', 'success');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Apply';
+            showToast('Failed: ' + err.message, 'error');
+        });
+    }
+
     // Show review step
     function showReviewStep() {
         document.getElementById('upload-step').style.display = 'none';
@@ -568,15 +578,14 @@
 
         yamlEditor.setValue(parsedData.yaml, -1);
 
-        // Populate raw text tab
-        if (parsedData.raw_text) {
-            document.getElementById('raw-text-view').textContent = parsedData.raw_text;
+        renderConfidence(parsedData.confidence);
+
+        // Show AI change bar if API key was provided
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (apiKey) {
+            document.getElementById('ai-change-bar').style.display = 'block';
         }
 
-        // Reset to YAML tab
-        switchTab('yaml');
-
-        renderConfidence(parsedData.confidence);
         updatePreview();
     }
 
@@ -595,6 +604,8 @@
 
     // Confirm button
     document.getElementById('confirm-btn').addEventListener('click', function() {
+        if (!confirm('Once confirmed, you won\'t be able to change the structure of the resume. Click OK to continue or Cancel to keep editing.')) return;
+
         var btn = this;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>Saving...';
@@ -608,7 +619,8 @@
                 resume: yamlContent,
                 header: parsedData.header,
                 style: parsedData.style,
-                custom_sections: parsedData.custom_sections
+                custom_sections: parsedData.custom_sections,
+                section_names: parsedData.section_names
             })
         })
         .then(function(r) { return r.json(); })
@@ -629,6 +641,11 @@
         });
     });
 
+    // Enter key triggers AI change apply
+    document.getElementById('ai-change-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); applyAIChange(); }
+    });
+
     // Preview update
     function updatePreview() {
         if (!parsedData || !yamlEditor) return;
@@ -640,7 +657,10 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 resume: yamlContent,
-                style: parsedData.style
+                style: parsedData.style,
+                header: parsedData.header,
+                section_names: parsedData.section_names,
+                custom_sections: parsedData.custom_sections
             })
         })
         .then(function(r) { return r.text(); })

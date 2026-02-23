@@ -88,7 +88,12 @@ PHONE_RE = re.compile(r'[\+]?[\d\s\-\(\)]{7,15}')
 URL_RE = re.compile(r'https?://[^\s,]+')
 GITHUB_RE = re.compile(r'github\.com/[\w\-]+', re.IGNORECASE)
 LINKEDIN_RE = re.compile(r'linkedin\.com/in/[\w\-]+', re.IGNORECASE)
-GPA_RE = re.compile(r'(?:GPA|CGPA)[:\s]*(\d+\.?\d*)', re.IGNORECASE)
+# Match GPA/CGPA with full context (e.g., "GPA: 3.9/4.0", "CGPA: 8.5")
+GPA_RE = re.compile(r'(?:GPA|CGPA)[:\s]*(\d+\.?\d*(?:\s*/\s*\d+\.?\d*)?)', re.IGNORECASE)
+# Match percentage patterns (e.g., "85%", "Percentage: 92.5%")
+PERCENT_RE = re.compile(r'(?:Percentage|Percent|Score|Marks)[:\s]*(\d+\.?\d*\s*%)', re.IGNORECASE)
+# Standalone percentage (e.g., "85%" without label)
+STANDALONE_PERCENT_RE = re.compile(r'\b(\d{2,3}\.?\d*\s*%)\b')
 
 # Shared month pattern: matches Jan, Feb, ..., Sep, Sept, September, etc.
 _MONTH = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)'
@@ -434,11 +439,20 @@ def parse_education_section(text_lines, line_meta=None):
             if date_part:
                 current['date'] = date_part
 
-            # Extract GPA
+            # Extract GPA or percentage — preserve the full original text
             gpa_match = GPA_RE.search(main_text)
+            percent_match = PERCENT_RE.search(main_text)
+            standalone_pct = STANDALONE_PERCENT_RE.search(main_text)
             if gpa_match:
-                current['gpa'] = gpa_match.group(1)
+                # Preserve "GPA: 3.9/4.0" as-is from PDF
+                current['gpa'] = gpa_match.group(0).strip()
                 degree_text = main_text[:gpa_match.start()].strip().rstrip(',').strip()
+            elif percent_match:
+                current['gpa'] = percent_match.group(0).strip()
+                degree_text = main_text[:percent_match.start()].strip().rstrip(',').strip()
+            elif standalone_pct:
+                current['gpa'] = standalone_pct.group(1).strip()
+                degree_text = main_text[:standalone_pct.start()].strip().rstrip(',').strip()
             else:
                 degree_text = main_text.strip()
 
@@ -453,10 +467,16 @@ def parse_education_section(text_lines, line_meta=None):
             current['degree'] = degree_text
             continue
 
-        # Check for GPA on its own
+        # Check for GPA or percentage on its own line
         gpa_match = GPA_RE.search(stripped)
+        percent_match = PERCENT_RE.search(stripped)
+        standalone_pct = STANDALONE_PERCENT_RE.search(stripped)
         if gpa_match:
-            current['gpa'] = gpa_match.group(1)
+            current['gpa'] = gpa_match.group(0).strip()
+        elif percent_match:
+            current['gpa'] = percent_match.group(0).strip()
+        elif standalone_pct:
+            current['gpa'] = standalone_pct.group(1).strip()
 
         # Check for date
         date_match = DATE_RE.search(stripped)
@@ -1090,6 +1110,9 @@ def _parse_from_lines(lines):
         if key not in result and not key.startswith('unknown_'):
             render_type, parsed = _smart_parse_section(text_lines, section_meta.get(key))
             result[key] = parsed
+
+    # Include original section heading text for proper section name display
+    result['_section_headings'] = section_headings
 
     return {"name": name, "contact": contact, **result}
 

@@ -13,7 +13,7 @@ from models import (
     get_user_dir, get_user_versions_dir, get_user_settings,
     update_user_settings, verify_user_password, delete_user,
     is_onboarding_complete, mark_onboarding_complete,
-    DEFAULT_SECTION_NAMES
+    DEFAULT_SECTION_NAMES, DATA_DIR
 )
 from pdf_parser import (parse_resume_pdf, extract_style_from_pdf,
                         extract_text_local, parse_resume_from_extracted,
@@ -415,11 +415,13 @@ def upload_resume():
         extracted_style = extract_style_from_pdf(pdf_path)
 
         # Step 1: Extract text with font metadata
-        extracted_data = daytona_sandbox.extract_text_in_sandbox(pdf_path)
+        sandbox_logs = []
+        extracted_data, sandbox_logs = daytona_sandbox.extract_text_in_sandbox(pdf_path)
         extraction_source = 'sandbox'
         if not extracted_data:
             extracted_data = extract_text_local(pdf_path)
             extraction_source = 'local'
+            sandbox_logs.append("Falling back to local extraction")
 
         if not extracted_data or not extracted_data.get('pages'):
             return jsonify({"status": "error",
@@ -451,10 +453,16 @@ def upload_resume():
             "contact": parsed.get('contact', {})
         }
 
+        # Build section_names from original PDF headings (not defaults)
+        raw_headings = parsed.pop('_section_headings', {})
+        section_names = {}
+        for key, heading_text in raw_headings.items():
+            section_names[key] = heading_text
+
         custom_sections = []
         for key in parsed:
             if key not in BUILTIN_KEYS:
-                display_name = key.replace('_', ' ').upper()
+                display_name = raw_headings.get(key, key.replace('_', ' ').upper())
                 render_type = _infer_render_type(parsed[key])
                 custom_sections.append({
                     "key": key,
@@ -465,14 +473,20 @@ def upload_resume():
         editable_data = strip_header(parsed, header)
         yaml_content = yaml.dump(editable_data, sort_keys=False, allow_unicode=True)
 
+        # Print sandbox logs to backend console
+        if sandbox_logs:
+            print(f"[Sandbox Logs] {extraction_source} extraction:")
+            for log_line in sandbox_logs:
+                print(f"  {log_line}")
+
         return jsonify({
             "status": "success",
             "yaml": yaml_content,
             "header": header,
             "style": extracted_style,
             "custom_sections": custom_sections,
+            "section_names": section_names,
             "confidence": confidence,
-            "raw_text": raw_text,
             "extraction_source": extraction_source
         })
     except Exception as e:
@@ -512,7 +526,7 @@ def search_section():
 
     try:
         # Try sandbox search first
-        search_result = daytona_sandbox.search_section_in_sandbox(pdf_path, section_hint)
+        search_result, _search_logs = daytona_sandbox.search_section_in_sandbox(pdf_path, section_hint)
 
         # Fallback to local search
         if not search_result.get('found'):
@@ -602,6 +616,7 @@ def complete_onboarding():
     header = data.get('header', {})
     style = data.get('style', {})
     custom_sections = data.get('custom_sections', [])
+    section_names = data.get('section_names', {})
 
     try:
         user_dir = get_user_dir(user_id)
@@ -615,8 +630,14 @@ def complete_onboarding():
                 if v:
                     merged_header.setdefault('contact', {})[k] = v
 
+        # Merge parsed section names with defaults
+        merged_section_names = current_settings.get('section_names', DEFAULT_SECTION_NAMES.copy())
+        if section_names:
+            merged_section_names.update(section_names)
+
         update_user_settings(user_id, header=merged_header, style=style,
-                             custom_sections=custom_sections)
+                             custom_sections=custom_sections,
+                             section_names=merged_section_names)
 
         if resume_yaml.strip():
             full_data = merge_header(resume_yaml, merged_header)
@@ -631,6 +652,60 @@ def complete_onboarding():
 
         mark_onboarding_complete(user_id)
         return jsonify({"status": "success", "message": "Setup complete!"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/ai_change_request', methods=['POST'])
+@login_required
+def ai_change_request():
+    """Apply an AI-driven change request to the parsed YAML during onboarding review."""
+    data = request.json
+    yaml_content = data.get('yaml', '')
+    change_request = data.get('change_request', '').strip()
+    ai_provider = data.get('ai_provider', '')
+    ai_api_key = data.get('ai_api_key', '')
+    ai_model = data.get('ai_model', '')
+
+    if not yaml_content or not change_request:
+        return jsonify({"status": "error", "message": "YAML content and change request are required."}), 400
+
+    if not ai_api_key:
+        return jsonify({"status": "error", "message": "An AI API key is required for change requests. Expand the AI section above."}), 400
+
+    try:
+        system_prompt = """You are a resume content editor. You will receive a resume in YAML format and a user's change request.
+
+Apply the requested changes to the YAML content and return the MODIFIED YAML.
+
+Rules:
+- Return ONLY the modified YAML content, no explanation or markdown code fences.
+- Preserve the YAML structure and formatting.
+- Only modify what the user requested. Do not add, remove, or change anything else.
+- Keep all existing content intact unless the user explicitly asks to change it.
+- If the request is unclear, make the most reasonable interpretation."""
+
+        user_msg = f"CURRENT YAML:\n{yaml_content}\n\nCHANGE REQUEST:\n{change_request}"
+        response_text = call_ai_provider(ai_provider, ai_api_key, system_prompt, user_msg, ai_model)
+
+        # Clean up response — remove markdown code fences if present
+        modified_yaml = response_text.strip()
+        if modified_yaml.startswith('```'):
+            lines = modified_yaml.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            modified_yaml = '\n'.join(lines)
+
+        # Validate it's parseable YAML
+        try:
+            yaml.safe_load(modified_yaml)
+        except Exception:
+            return jsonify({"status": "error", "message": "AI returned invalid YAML. Try rephrasing your request."}), 400
+
+        return jsonify({"status": "success", "yaml": modified_yaml})
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -701,9 +776,10 @@ def preview():
     style = data.get('style', {})
 
     try:
-        header = get_current_user_header()
-        section_names = get_current_section_names()
-        custom_sections = get_current_custom_sections()
+        # Allow overrides from request (used during onboarding before data is saved)
+        header = data.get('header') or get_current_user_header()
+        section_names = data.get('section_names') or get_current_section_names()
+        custom_sections = data.get('custom_sections') or get_current_custom_sections()
         resume_data = merge_header(resume_yaml, header)
 
         env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
@@ -842,6 +918,36 @@ def settings():
 
 
 # --- Delete Profile ---
+
+@app.route('/api/feedback', methods=['POST'])
+@login_required
+def submit_feedback():
+    """Save user feedback to a file."""
+    data = request.json
+    feedback_text = data.get('feedback', '').strip()
+
+    if not feedback_text:
+        return jsonify({"status": "error", "message": "Feedback cannot be empty."}), 400
+
+    user_id = get_current_user_id()
+    user = get_user_by_id(user_id)
+    user_name = user['name'] if user else 'Unknown'
+
+    feedback_file = os.path.join(DATA_DIR, 'feedback.jsonl')
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "user_name": user_name,
+        "user_id": user_id,
+        "feedback": feedback_text
+    }
+
+    try:
+        with open(feedback_file, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+        return jsonify({"status": "success", "message": "Thank you for your feedback!"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route('/api/delete_profile', methods=['POST'])
 @login_required
@@ -1260,4 +1366,5 @@ def parse_json_response(response_text):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5001, host='0.0.0.0')
+    port = int(os.environ.get('PORT', 5001))
+    app.run(debug=os.environ.get('FLASK_DEBUG', '1') == '1', port=port, host='0.0.0.0')

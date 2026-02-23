@@ -1,0 +1,17 @@
+# User data
+data/
+versions/
+*.db
+feedback.jsonl
+
+# Uploaded/generated files
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# OS
+.DS_Store
