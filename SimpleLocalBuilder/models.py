@@ -273,7 +273,7 @@ def is_onboarding_complete(user_id):
 
 def mark_onboarding_complete(user_id):
     conn = get_db()
-    _execute(conn, f'UPDATE users SET onboarding_complete = 1 WHERE id = {PH}', (user_id,))
+    _execute(conn, f'UPDATE users SET onboarding_complete = TRUE WHERE id = {PH}', (user_id,))
     conn.commit()
     conn.close()
 
