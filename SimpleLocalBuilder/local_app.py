@@ -408,6 +408,8 @@ def upload_resume():
     ai_model = request.form.get('ai_model', '')
 
     user_dir = get_user_dir(user_id)
+    os.makedirs(user_dir, exist_ok=True)
+    os.makedirs(os.path.join(user_dir, 'versions'), exist_ok=True)
     pdf_path = os.path.join(user_dir, 'onboarding_upload.pdf')
     pdf_file.save(pdf_path)
 
