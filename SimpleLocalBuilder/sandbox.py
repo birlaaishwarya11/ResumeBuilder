@@ -72,8 +72,18 @@ def extract(pdf_path):
             if current_line_chars:
                 raw_lines.append(current_line_chars)
 
+            # Assign each URI to exactly the closest line only
+            line_uris = [[] for _ in raw_lines]
+            line_ys = [round(lc[0]['top'], 1) for lc in raw_lines]
+            for link_top, uri in link_positions:
+                if not line_ys:
+                    continue
+                best_idx = min(range(len(line_ys)), key=lambda i: abs(line_ys[i] - link_top))
+                if abs(line_ys[best_idx] - link_top) < 20:
+                    line_uris[best_idx].append(uri)
+
             lines = []
-            for line_chars in raw_lines:
+            for line_chars, uris in zip(raw_lines, line_uris):
                 line_chars = sorted(line_chars, key=lambda c: c['x0'])
                 parts = []
                 for i, ch in enumerate(line_chars):
@@ -86,12 +96,10 @@ def extract(pdf_path):
                 text = ''.join(parts).strip()
                 if not text:
                     continue
-                # Append any hyperlink URIs whose y-position aligns with this line
-                if link_positions and line_chars:
-                    line_top = round(line_chars[0]['top'], 1)
-                    for link_top, uri in link_positions:
-                        if abs(link_top - line_top) < 10 and uri not in text:
-                            text = text + ' ' + uri
+                # Append only pre-assigned URIs (one URI → one line, no duplication)
+                for uri in uris:
+                    if uri not in text:
+                        text = text + ' ' + uri
                 sizes = [ch.get('size', 0) for ch in line_chars if ch['text'].strip()]
                 avg_size = sum(sizes) / len(sizes) if sizes else 10.0
                 fonts = [ch.get('fontname', '') for ch in line_chars if ch['text'].strip()]

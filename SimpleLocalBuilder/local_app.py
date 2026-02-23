@@ -404,13 +404,15 @@ def upload_resume():
         raw_text = _build_raw_text(extracted_data)
 
         # Step 2: Parse into structured data
+        ai_error_info = None
         if ai_api_key:
             # AI two-phase parsing with annotated text (font hints)
             annotated_text = _build_annotated_text(extracted_data)
             try:
                 parsed = _ai_parse_two_phase(annotated_text, ai_provider, ai_api_key, ai_model)
             except Exception as e:
-                print(f"AI parse failed ({e}), falling back to heuristic")
+                ai_error_info = _extract_ai_error_info(e)
+                print(f"AI parse failed ({ai_error_info['message']}), falling back to heuristic")
                 parsed = parse_resume_from_extracted(extracted_data)
         else:
             parsed = parse_resume_from_extracted(extracted_data)
@@ -453,8 +455,7 @@ def upload_resume():
             for log_line in sandbox_logs:
                 print(f"  {log_line}")
 
-        return jsonify({
-            "status": "success",
+        response_payload = {
             "yaml": yaml_content,
             "header": header,
             "style": extracted_style,
@@ -462,7 +463,16 @@ def upload_resume():
             "section_names": section_names,
             "confidence": confidence,
             "extraction_source": extraction_source
-        })
+        }
+
+        if ai_error_info:
+            response_payload["status"] = "ai_parse_failed"
+            response_payload["ai_error"] = ai_error_info["message"]
+            response_payload["ai_status_code"] = ai_error_info["status_code"]
+        else:
+            response_payload["status"] = "success"
+
+        return jsonify(response_payload)
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -1271,6 +1281,32 @@ def download_pdf():
 
 # --- AI provider helpers ---
 
+def _extract_ai_error_info(e):
+    """Extract a user-facing error message and HTTP status code from an AI provider exception."""
+    msg = str(e)
+    status_code = None
+
+    # Anthropic: anthropic.APIStatusError has .status_code
+    if hasattr(e, 'status_code'):
+        status_code = e.status_code
+
+    # OpenAI: openai.APIError has .status_code
+    if status_code is None and hasattr(e, 'code'):
+        status_code = e.code
+
+    # Gemini / generic: try to pull leading "NNN " from message
+    if status_code is None:
+        import re
+        m = re.match(r'^(\d{3})\b', msg.strip())
+        if m:
+            status_code = int(m.group(1))
+
+    # Build a short, readable summary (first line only, cap at 300 chars)
+    short = msg.splitlines()[0][:300]
+
+    return {"message": short, "status_code": status_code}
+
+
 def call_ai_provider(provider, api_key, system_prompt, user_message, model=None):
     if provider == 'anthropic':
         import anthropic
@@ -1301,12 +1337,18 @@ def call_ai_provider(provider, api_key, system_prompt, user_message, model=None)
         return completion.choices[0].message.content
 
     elif provider == 'gemini':
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=api_key)
         model_name = model if model else 'gemini-1.5-flash'
-        model_instance = genai.GenerativeModel(model_name)
-        full_prompt = system_prompt + "\n\n" + user_message
-        response = model_instance.generate_content(full_prompt)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0,
+            )
+        )
         return response.text
 
     raise ValueError(f"Unknown provider: {provider}")
