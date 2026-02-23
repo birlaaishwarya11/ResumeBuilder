@@ -155,29 +155,49 @@ def extract_lines_with_meta(pdf_path):
                     continue
                 link_positions.append((round(top, 1), uri))
 
+            # Group chars into lines by y-position
+            sorted_chars = sorted(chars, key=lambda c: (round(c['top'], 1), c['x0']))
+            raw_lines = []   # list of (y, char_list)
             current_line_chars = []
             current_y = None
-
-            sorted_chars = sorted(chars, key=lambda c: (round(c['top'], 1), c['x0']))
 
             for ch in sorted_chars:
                 y = round(ch['top'], 1)
                 if current_y is None or abs(y - current_y) > 3:
                     if current_line_chars:
-                        lines.append(_build_line(current_line_chars, link_positions))
+                        raw_lines.append((current_y, current_line_chars))
                     current_line_chars = [ch]
                     current_y = y
                 else:
                     current_line_chars.append(ch)
-
             if current_line_chars:
-                lines.append(_build_line(current_line_chars, link_positions))
+                raw_lines.append((current_y, current_line_chars))
+
+            # Assign each URI to exactly the closest line (prevents duplication
+            # when a hyperlink annotation spans multiple adjacent text lines)
+            line_uris = [[] for _ in raw_lines]
+            line_ys = [y for y, _ in raw_lines]
+            for link_top, uri in link_positions:
+                if not line_ys:
+                    continue
+                best_idx = min(range(len(line_ys)), key=lambda i: abs(line_ys[i] - link_top))
+                if abs(line_ys[best_idx] - link_top) < 20:
+                    line_uris[best_idx].append(uri)
+
+            for (_, char_list), uris in zip(raw_lines, line_uris):
+                lines.append(_build_line(char_list, uris))
 
     return lines
 
 
-def _build_line(chars, link_positions=None):
-    """Build a line dict from a list of character dicts, inserting spaces for gaps."""
+def _build_line(chars, line_uris=None):
+    """Build a line dict from a list of character dicts, inserting spaces for gaps.
+
+    line_uris: list of URI strings already pre-assigned to this specific line
+               (caller is responsible for closest-line matching; no proximity
+               logic is performed here to avoid the same URI appearing on
+               multiple adjacent lines).
+    """
     # Sort by x position
     chars = sorted(chars, key=lambda c: c['x0'])
 
@@ -195,11 +215,10 @@ def _build_line(chars, link_positions=None):
 
     text = ''.join(parts).strip()
 
-    # Append any hyperlink URIs whose y-position aligns with this line
-    if link_positions and chars:
-        line_top = round(chars[0]['top'], 1)
-        for link_top, uri in link_positions:
-            if abs(link_top - line_top) < 10 and uri not in text:
+    # Append URIs that were pre-assigned to this line (one URI → one line only)
+    if line_uris:
+        for uri in line_uris:
+            if uri not in text:
                 text = text + ' ' + uri
 
     sizes = [ch.get('size', 0) for ch in chars if ch['text'].strip()]
@@ -992,27 +1011,37 @@ def extract_text_local(pdf_path):
                         pages.append({"page": page_num, "lines": lines})
                 continue
 
-            # Reuse existing extraction logic
+            # Group chars into lines by y-position
             sorted_chars = sorted(chars, key=lambda c: (round(c['top'], 1), c['x0']))
+            raw_lines = []   # list of (y, char_list)
             current_line_chars = []
             current_y = None
-            raw_lines = []
 
             for ch in sorted_chars:
                 y = round(ch['top'], 1)
                 if current_y is None or abs(y - current_y) > 3:
                     if current_line_chars:
-                        raw_lines.append(current_line_chars)
+                        raw_lines.append((current_y, current_line_chars))
                     current_line_chars = [ch]
                     current_y = y
                 else:
                     current_line_chars.append(ch)
             if current_line_chars:
-                raw_lines.append(current_line_chars)
+                raw_lines.append((current_y, current_line_chars))
+
+            # Assign each URI to exactly the closest line only
+            line_uris = [[] for _ in raw_lines]
+            line_ys = [y for y, _ in raw_lines]
+            for link_top, uri in link_positions:
+                if not line_ys:
+                    continue
+                best_idx = min(range(len(line_ys)), key=lambda i: abs(line_ys[i] - link_top))
+                if abs(line_ys[best_idx] - link_top) < 20:
+                    line_uris[best_idx].append(uri)
 
             lines = []
-            for line_chars in raw_lines:
-                built = _build_line(line_chars, link_positions)
+            for (_, char_list), uris in zip(raw_lines, line_uris):
+                built = _build_line(char_list, uris)
                 if built['text']:
                     lines.append(built)
 
