@@ -260,6 +260,17 @@
             </div>
         </div>
 
+        <!-- Locked parser banner (shown when user has a confirmed parser) -->
+        <div id="locked-parser-banner" style="display:none; margin-top:16px; padding:12px 16px; background:#e8f5e9; border:1px solid #4caf50; border-radius:8px;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <span style="font-size:1.1em; flex-shrink:0;">&#128274;</span>
+                <div style="flex:1; font-size:0.87em; color:#2e7d32;">
+                    <strong>Locked parser active.</strong> Your confirmed custom parser will be used for this upload.
+                </div>
+                <button class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="clearLockedParser()">Clear &amp; Regenerate</button>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -270,6 +281,31 @@
         <span style="font-size:0.85em; color:#666;">Edit the YAML on the left. Preview updates automatically.</span>
     </div>
     <div id="confidence-bar" class="confidence-bar" style="display:none;"></div>
+
+    <!-- Smart parser panel (shown after smart parser generates/uses code) -->
+    <div id="smart-parser-panel" style="display:none; margin:0 0 0 0; padding:10px 20px; background:#f0f7ff; border-bottom:1px solid #b3d4f5;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span id="parser-status-icon" style="font-size:1em; flex-shrink:0;">&#129513;</span>
+            <span id="parser-status-label" style="font-size:0.85em; color:#1565c0; font-weight:600; flex:1;"></span>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button id="lock-parser-btn" class="btn btn-success" style="font-size:0.8em; padding:5px 12px; display:none;" onclick="lockParser()">Confirm &amp; Lock Parser</button>
+                <button id="unlock-parser-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px; display:none;" onclick="unlockParser()">Unlock</button>
+                <button id="clear-parser-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="clearParserFromReview()">Clear Parser</button>
+                <button id="toggle-code-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="toggleParserCode()">Show Code</button>
+            </div>
+        </div>
+        <!-- Collapsible code panel -->
+        <div id="parser-code-panel" style="display:none; margin-top:10px;">
+            <pre id="parser-code-display" style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; font-size:0.78em; max-height:260px; overflow:auto; white-space:pre-wrap; word-break:break-all;"></pre>
+            <!-- Refine chat inside code panel -->
+            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+                <input type="text" id="refine-input" placeholder="Describe a change to the parser (e.g. also extract the summary section)..." style="flex:1; padding:7px 12px; font-size:0.85em; border:1px solid #ddd; border-radius:6px;">
+                <button id="refine-btn" class="btn btn-primary" style="font-size:0.8em; padding:7px 14px; white-space:nowrap;" onclick="refineParser()">Refine</button>
+            </div>
+            <div class="file-note" style="margin-top:4px;">Requires an AI API key. Describe what you want the parser to do differently, then re-test by re-uploading.</div>
+        </div>
+    </div>
+
     <div class="review-body">
         <div class="review-left">
             <div class="panel-label">YAML Editor</div>
@@ -363,7 +399,10 @@
                 parsedData = data;
                 showReviewStep();
                 var source = data.extraction_source === 'sandbox' ? ' (via sandbox)' : '';
-                showToast('PDF parsed successfully' + source + '!', 'success');
+                var parserLabel = '';
+                if (data.parser_used === 'smart_locked') parserLabel = ' with locked parser';
+                else if (data.parser_used === 'smart_generated') parserLabel = ' with AI-generated parser';
+                showToast('PDF parsed successfully' + source + parserLabel + '!', 'success');
             } else if (data.status === 'ai_parse_failed') {
                 // AI key/model failed — keep heuristic result ready, show error panel
                 parsedData = data;
@@ -577,6 +616,13 @@
 
         renderConfidence(parsedData.confidence);
 
+        // Show smart parser panel if applicable
+        updateSmartParserPanel(
+            parsedData.parser_used,
+            parsedData.generated_parser_code || null,
+            parsedData.parser_used === 'smart_locked'
+        );
+
         // Show AI change bar if API key was provided
         var apiKey = document.getElementById('ai-api-key').value.trim();
         if (apiKey) {
@@ -595,6 +641,9 @@
         document.getElementById('parse-btn').disabled = true;
         document.getElementById('parse-options').style.display = 'none';
         document.getElementById('ai-error-panel').style.display = 'none';
+        document.getElementById('smart-parser-panel').style.display = 'none';
+        document.getElementById('parser-code-panel').style.display = 'none';
+        document.getElementById('toggle-code-btn').textContent = 'Show Code';
         document.getElementById('search-result').style.display = 'none';
         document.getElementById('section-hint').value = '';
         lastSearchSnippet = '';
@@ -697,6 +746,218 @@
     document.getElementById('ai-change-input').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') { e.preventDefault(); applyAIChange(); }
     });
+
+    // Enter key triggers parser refine
+    document.getElementById('refine-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); refineParser(); }
+    });
+
+    // -----------------------------------------------------------------------
+    // Smart parser helpers
+    // -----------------------------------------------------------------------
+
+    // Check on page load whether user has a locked parser
+    (function checkParserStatus() {
+        fetch('/tools/parser_status')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.has_parser && data.locked) {
+                    document.getElementById('locked-parser-banner').style.display = 'block';
+                }
+            })
+            .catch(function() {});
+    })();
+
+    function updateSmartParserPanel(parserUsed, code, locked) {
+        var panel = document.getElementById('smart-parser-panel');
+        var icon = document.getElementById('parser-status-icon');
+        var label = document.getElementById('parser-status-label');
+        var lockBtn = document.getElementById('lock-parser-btn');
+        var unlockBtn = document.getElementById('unlock-parser-btn');
+        var codeDisplay = document.getElementById('parser-code-display');
+
+        if (!parserUsed || parserUsed === 'heuristic') {
+            panel.style.display = 'none';
+            return;
+        }
+
+        panel.style.display = 'block';
+        codeDisplay.textContent = code || '';
+
+        if (parserUsed === 'smart_locked') {
+            icon.textContent = '\uD83D\uDD12';
+            label.textContent = 'Using your confirmed custom parser.';
+            lockBtn.style.display = 'none';
+            unlockBtn.style.display = 'inline-block';
+        } else if (parserUsed === 'smart_generated') {
+            icon.textContent = '\u2728';
+            label.textContent = 'New custom parser generated. Review and lock it to reuse for future uploads.';
+            lockBtn.style.display = 'inline-block';
+            unlockBtn.style.display = 'none';
+        }
+    }
+
+    function toggleParserCode() {
+        var panel = document.getElementById('parser-code-panel');
+        var btn = document.getElementById('toggle-code-btn');
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+            btn.textContent = 'Hide Code';
+        } else {
+            panel.style.display = 'none';
+            btn.textContent = 'Show Code';
+        }
+    }
+
+    function lockParser() {
+        var code = document.getElementById('parser-code-display').textContent;
+        if (!code) { showToast('No parser code to lock.', 'error'); return; }
+
+        var btn = document.getElementById('lock-parser-btn');
+        btn.disabled = true;
+        btn.textContent = 'Locking...';
+
+        fetch('/tools/lock_parser', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: 'lock', code: code })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            if (data.status === 'success') {
+                btn.style.display = 'none';
+                document.getElementById('unlock-parser-btn').style.display = 'inline-block';
+                document.getElementById('parser-status-icon').textContent = '\uD83D\uDD12';
+                document.getElementById('parser-status-label').textContent = 'Parser locked. It will be reused for future uploads.';
+                document.getElementById('locked-parser-banner').style.display = 'block';
+                showToast('Parser locked! It will be reused for future uploads.', 'success');
+            } else {
+                btn.textContent = 'Confirm & Lock Parser';
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Confirm & Lock Parser';
+            showToast('Failed: ' + err.message, 'error');
+        });
+    }
+
+    function unlockParser() {
+        fetch('/tools/lock_parser', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: 'unlock' })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                document.getElementById('unlock-parser-btn').style.display = 'none';
+                document.getElementById('lock-parser-btn').style.display = 'inline-block';
+                document.getElementById('lock-parser-btn').textContent = 'Confirm & Lock Parser';
+                document.getElementById('parser-status-icon').textContent = '\u2728';
+                document.getElementById('parser-status-label').textContent = 'Parser unlocked. Lock it again after reviewing.';
+                document.getElementById('locked-parser-banner').style.display = 'none';
+                showToast('Parser unlocked.', 'info');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
+    }
+
+    function clearLockedParser() {
+        if (!confirm('Clear the locked parser? Next upload will generate a new one (requires API key).')) return;
+        fetch('/tools/lock_parser', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: 'clear' })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                document.getElementById('locked-parser-banner').style.display = 'none';
+                showToast('Parser cleared. A new one will be generated on next upload.', 'info');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
+    }
+
+    function clearParserFromReview() {
+        if (!confirm('Clear parser? Next upload will regenerate it.')) return;
+        fetch('/tools/lock_parser', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ action: 'clear' })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.status === 'success') {
+                document.getElementById('smart-parser-panel').style.display = 'none';
+                document.getElementById('locked-parser-banner').style.display = 'none';
+                showToast('Parser cleared.', 'info');
+            }
+        })
+        .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
+    }
+
+    function refineParser() {
+        var changeText = document.getElementById('refine-input').value.trim();
+        if (!changeText) { showToast('Describe what you want to change about the parser.', 'error'); return; }
+
+        var apiKey = document.getElementById('ai-api-key').value.trim();
+        if (!apiKey) {
+            showToast('An AI API key is required. Expand the AI settings in the upload step.', 'error');
+            return;
+        }
+
+        var currentCode = document.getElementById('parser-code-display').textContent;
+        if (!currentCode) { showToast('No parser code to refine.', 'error'); return; }
+
+        var btn = document.getElementById('refine-btn');
+        btn.disabled = true;
+        btn.textContent = 'Refining...';
+
+        fetch('/tools/refine_parser', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                code: currentCode,
+                change_request: changeText,
+                provider: document.getElementById('ai-provider').value,
+                api_key: apiKey,
+                model: getSelectedModel()
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.textContent = 'Refine';
+            if (data.status === 'success') {
+                document.getElementById('parser-code-display').textContent = data.code;
+                // Auto-save refined code (unlocked) so it persists
+                fetch('/tools/lock_parser', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'unlock', code: data.code })
+                });
+                document.getElementById('refine-input').value = '';
+                document.getElementById('lock-parser-btn').style.display = 'inline-block';
+                document.getElementById('parser-status-label').textContent = 'Parser refined. Review the YAML and lock when satisfied.';
+                showToast('Parser updated. Re-upload your PDF to see the new result.', 'success');
+            } else {
+                showToast('Error: ' + data.message, 'error');
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.textContent = 'Refine';
+            showToast('Failed: ' + err.message, 'error');
+        });
+    }
 
     // Preview update
     function updatePreview() {

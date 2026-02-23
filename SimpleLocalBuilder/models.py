@@ -96,6 +96,12 @@ def init_db():
                 style_json TEXT NOT NULL DEFAULT '{}'
             )
         ''')
+        # Migrations for existing databases
+        for col, defval in [('parser_code', 'NULL'), ('parser_locked', '0')]:
+            try:
+                cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
+            except Exception:
+                pass  # column already exists
         # Reset verbose legacy section name defaults to simple ones
         cur.execute(
             "UPDATE user_settings SET section_names_json = %s WHERE section_names_json = %s",
@@ -133,6 +139,14 @@ def init_db():
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE users ADD COLUMN onboarding_complete INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE users SET onboarding_complete = 1")
+        try:
+            conn.execute("SELECT parser_code FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE users ADD COLUMN parser_code TEXT DEFAULT NULL")
+        try:
+            conn.execute("SELECT parser_locked FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE users ADD COLUMN parser_locked INTEGER NOT NULL DEFAULT 0")
         # Reset verbose legacy section name defaults to simple ones
         conn.execute(
             "UPDATE user_settings SET section_names_json = ? WHERE section_names_json = ?",
@@ -292,6 +306,38 @@ def is_onboarding_complete(user_id):
 def mark_onboarding_complete(user_id):
     conn = get_db()
     _execute(conn, f'UPDATE users SET onboarding_complete = TRUE WHERE id = {PH}', (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_user_parser(user_id):
+    """Return (parser_code, parser_locked) for a user, or (None, False)."""
+    conn = get_db()
+    row = _fetchone(conn, f'SELECT parser_code, parser_locked FROM users WHERE id = {PH}', (user_id,))
+    conn.close()
+    if row:
+        return row.get('parser_code'), bool(row.get('parser_locked'))
+    return None, False
+
+
+def save_user_parser(user_id, code, locked=True):
+    """Store generated parser code and optionally mark it locked."""
+    conn = get_db()
+    _execute(conn,
+        f'UPDATE users SET parser_code = {PH}, parser_locked = {PH} WHERE id = {PH}',
+        (code, 1 if locked else 0, user_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def clear_user_parser(user_id):
+    """Remove the stored parser (e.g. when user wants to regenerate)."""
+    conn = get_db()
+    _execute(conn,
+        f'UPDATE users SET parser_code = NULL, parser_locked = 0 WHERE id = {PH}',
+        (user_id,)
+    )
     conn.commit()
     conn.close()
 

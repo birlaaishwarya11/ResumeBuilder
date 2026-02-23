@@ -20,6 +20,9 @@ from pdf_parser import (extract_style_from_pdf,
                         _smart_parse_section, _normalize_section_key)
 from confidence import score_parsed_resume
 import sandbox as daytona_sandbox
+from models import get_user_parser, save_user_parser
+import smart_parser as sp
+from tools import tools_bp
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -31,6 +34,9 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
 # Initialize database on startup
 init_db()
+
+# Register blueprints
+app.register_blueprint(tools_bp)
 
 
 # --- Auth helpers ---
@@ -362,10 +368,14 @@ def onboarding():
 def upload_resume():
     """Upload and parse a PDF during onboarding. Returns parsed data as JSON.
 
-    Single pipeline:
-      1. Extract text (sandbox if available, else local)
-      2. Parse (AI two-phase if key provided, else heuristic)
-      3. Return YAML + raw text + confidence + style
+    Pipeline (in priority order):
+      1. Extract text (Daytona sandbox if available, else local)
+      2. Parse:
+         a. Locked smart parser (stored code) — if user has confirmed one
+         b. Smart parser — LLM generates + runs a custom parse() in Daytona
+         c. AI two-phase (legacy) — if api key provided but no smart parser creds
+         d. Heuristic fallback — always works, no key required
+      3. Return YAML + header + confidence + style
     """
     user_id = get_current_user_id()
     if is_onboarding_complete(user_id):
@@ -401,19 +411,65 @@ def upload_resume():
             return jsonify({"status": "error",
                             "message": "Could not extract text from PDF. The file may be image-only or corrupted."}), 500
 
+        # Build flat line list for smart parser
+        flat_lines = []
+        for page in extracted_data.get('pages', []):
+            flat_lines.extend(page.get('lines', []))
+
         raw_text = _build_raw_text(extracted_data)
+
+        # Resolve smart-parser credentials (user key > env var > None)
+        sp_provider, sp_api_key, sp_model = sp.resolve_parser_credentials(
+            ai_provider, ai_api_key, ai_model
+        )
 
         # Step 2: Parse into structured data
         ai_error_info = None
-        if ai_api_key:
-            # AI two-phase parsing with annotated text (font hints)
-            annotated_text = _build_annotated_text(extracted_data)
+        parser_used = 'heuristic'
+        generated_parser_code = None
+
+        # 2a. Check for a locked smart parser
+        stored_code, is_locked = get_user_parser(user_id)
+        if stored_code and is_locked:
+            print(f"[SmartParser] Using locked parser for user {user_id}")
+            result, final_code, sp_logs = sp.run_parser(
+                flat_lines, stored_code,
+                provider=sp_provider, api_key=sp_api_key, model=sp_model
+            )
+            sandbox_logs.extend(sp_logs)
+            if result is not None:
+                parsed = sp.normalize_dates(result)
+                parser_used = 'smart_locked'
+            else:
+                print("[SmartParser] Locked parser failed, falling back to heuristic")
+                parsed = parse_resume_from_extracted(extracted_data)
+
+        # 2b. Generate a new smart parser (if credentials available)
+        elif sp_provider and sp_api_key:
+            print(f"[SmartParser] Generating new parser for user {user_id}")
             try:
-                parsed = _ai_parse_two_phase(annotated_text, ai_provider, ai_api_key, ai_model)
+                code = sp.generate_parser_code(flat_lines, sp_provider, sp_api_key, sp_model)
+                result, final_code, sp_logs = sp.run_parser(
+                    flat_lines, code,
+                    provider=sp_provider, api_key=sp_api_key, model=sp_model
+                )
+                sandbox_logs.extend(sp_logs)
+                if result is not None:
+                    parsed = sp.normalize_dates(result)
+                    parser_used = 'smart_generated'
+                    generated_parser_code = final_code
+                    # Store (unlocked) so user can review and confirm
+                    save_user_parser(user_id, final_code, locked=False)
+                    print(f"[SmartParser] Parser stored (unlocked) for user {user_id}")
+                else:
+                    print("[SmartParser] Generated parser failed, falling back to heuristic")
+                    parsed = parse_resume_from_extracted(extracted_data)
             except Exception as e:
                 ai_error_info = _extract_ai_error_info(e)
-                print(f"AI parse failed ({ai_error_info['message']}), falling back to heuristic")
+                print(f"[SmartParser] Generation failed ({ai_error_info['message']}), falling back to heuristic")
                 parsed = parse_resume_from_extracted(extracted_data)
+
+        # 2c. Heuristic fallback
         else:
             parsed = parse_resume_from_extracted(extracted_data)
 
@@ -462,8 +518,12 @@ def upload_resume():
             "custom_sections": custom_sections,
             "section_names": section_names,
             "confidence": confidence,
-            "extraction_source": extraction_source
+            "extraction_source": extraction_source,
+            "parser_used": parser_used,
         }
+
+        if generated_parser_code:
+            response_payload["generated_parser_code"] = generated_parser_code
 
         if ai_error_info:
             response_payload["status"] = "ai_parse_failed"
