@@ -22,12 +22,20 @@ else:
     PH = '?'
 
 DEFAULT_SECTION_NAMES = {
+    "education": "Education",
+    "technical_skills": "Skills",
+    "experience": "Experience",
+    "projects": "Projects",
+    "extracurricular": "Extracurricular"
+}
+
+_OLD_SECTION_NAMES_JSON = json.dumps({
     "education": "EDUCATION",
     "technical_skills": "TECHNICAL SKILLS",
     "experience": "PROFESSIONAL EXPERIENCE",
     "projects": "PROJECTS AND HACKATHON HIGHLIGHTS",
     "extracurricular": "EXTRACURRICULAR ACTIVITIES / VOLUNTEER & RESEARCH PAPERS"
-}
+})
 
 
 def get_db():
@@ -88,6 +96,11 @@ def init_db():
                 style_json TEXT NOT NULL DEFAULT '{}'
             )
         ''')
+        # Reset verbose legacy section name defaults to simple ones
+        cur.execute(
+            "UPDATE user_settings SET section_names_json = %s WHERE section_names_json = %s",
+            (json.dumps(DEFAULT_SECTION_NAMES), _OLD_SECTION_NAMES_JSON)
+        )
         conn.commit()
         cur.close()
     else:
@@ -120,6 +133,11 @@ def init_db():
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE users ADD COLUMN onboarding_complete INTEGER NOT NULL DEFAULT 0")
             conn.execute("UPDATE users SET onboarding_complete = 1")
+        # Reset verbose legacy section name defaults to simple ones
+        conn.execute(
+            "UPDATE user_settings SET section_names_json = ? WHERE section_names_json = ?",
+            (json.dumps(DEFAULT_SECTION_NAMES), _OLD_SECTION_NAMES_JSON)
+        )
         conn.commit()
 
     conn.close()
