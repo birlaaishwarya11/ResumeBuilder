@@ -1,0 +1,38 @@
+name: Deploy to TrueFoundry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'SimpleLocalBuilder/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: SimpleLocalBuilder
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install TrueFoundry CLI
+        run: pip install truefoundry
+
+      - name: Login to TrueFoundry
+        run: tfy login --host "${{ secrets.TFY_HOST }}" --api-key "${{ secrets.TFY_API_KEY }}" --no-browser
+
+      - name: Deploy to TrueFoundry
+        run: |
+          python deploy_tfy.py \
+            --workspace_fqn "${{ secrets.TFY_WORKSPACE_FQN }}" \
+            --volume_fqn "${{ secrets.TFY_VOLUME_FQN }}" \
+            --database_url "${{ secrets.DATABASE_URL }}" \
+            --secret_key "${{ secrets.SECRET_KEY }}"
