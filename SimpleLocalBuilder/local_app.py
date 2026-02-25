@@ -1408,13 +1408,13 @@ def call_ai_provider(provider, api_key, system_prompt, user_message, model=None)
         from google.genai import types
         client = genai.Client(api_key=api_key)
         model_name = model if model else 'gemini-1.5-flash'
+        config_kwargs = {'temperature': 0}
+        if system_prompt:  # Gemini SDK rejects empty string system_instruction
+            config_kwargs['system_instruction'] = system_prompt
         response = client.models.generate_content(
             model=model_name,
-            contents=user_message,
-            config=types.GenerateContentConfig(
-                system_instruction=system_prompt,
-                temperature=0,
-            )
+            contents=user_message or system_prompt,
+            config=types.GenerateContentConfig(**config_kwargs)
         )
         return response.text
 

@@ -34,7 +34,7 @@ def extract(pdf_path):
             page_height = page.height
             link_positions = []
             for h in (page.hyperlinks or []):
-                uri = h.get('uri', '')
+                uri = ''.join(c for c in h.get('uri', '') if c.isprintable()).strip()
                 if not uri:
                     continue
                 if 'top' in h:
