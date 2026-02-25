@@ -1421,7 +1421,10 @@ def call_ai_provider(provider, api_key, system_prompt, user_message, model=None)
             contents=content,
             config=types.GenerateContentConfig(temperature=0)
         )
-        return response.text
+        result = response.text
+        if result is None:
+            raise ValueError("Gemini returned an empty response (response may have been blocked by safety filters)")
+        return result
 
     raise ValueError(f"Unknown provider: {provider}")
 

@@ -112,6 +112,8 @@ def _call_llm(provider, api_key, prompt, model=None):
 
 def _clean_code(raw: str) -> str:
     """Strip markdown fences if the LLM wrapped the code anyway."""
+    if not raw:
+        return ''
     raw = raw.strip()
     raw = re.sub(r'^```(?:python)?\n?', '', raw, flags=re.IGNORECASE)
     raw = re.sub(r'\n?```$', '', raw)
