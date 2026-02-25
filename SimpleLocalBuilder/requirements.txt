@@ -10,3 +10,5 @@ pdfplumber
 daytona-sdk
 psycopg2-binary
 gunicorn
+mcp[cli]
+uvicorn
