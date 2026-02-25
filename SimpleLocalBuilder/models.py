@@ -90,14 +90,49 @@ def init_db():
         ''')
         cur.execute('''
             CREATE TABLE IF NOT EXISTS user_settings (
-                user_id INTEGER PRIMARY KEY REFERENCES users(id),
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                 header_json TEXT NOT NULL DEFAULT '{}',
                 section_names_json TEXT NOT NULL DEFAULT '{}',
                 custom_sections_json TEXT NOT NULL DEFAULT '[]',
                 style_json TEXT NOT NULL DEFAULT '{}'
             )
         ''')
-        # Migrations for existing databases
+        # --- New tables ---
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS parsers (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                code TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'DRAFT',
+                label TEXT DEFAULT NULL,
+                source_pdf_hash TEXT DEFAULT NULL,
+                coverage_score REAL DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS resume_versions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                yaml_content TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual_edit',
+                label TEXT DEFAULT NULL,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS jd_sessions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                jd_text TEXT NOT NULL,
+                match_score INTEGER DEFAULT NULL,
+                suggestions_json TEXT NOT NULL DEFAULT '[]',
+                applied_version_id INTEGER DEFAULT NULL REFERENCES resume_versions(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL
+            )
+        ''')
+        # Migrations for existing databases (legacy columns on users, kept for backward compat)
         for col, defval in [('parser_code', 'NULL'), ('parser_locked', '0'), ('mcp_api_key', 'NULL')]:
             try:
                 cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
@@ -123,7 +158,39 @@ def init_db():
                 user_id INTEGER PRIMARY KEY,
                 header_json TEXT NOT NULL DEFAULT '{}',
                 section_names_json TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY (user_id) REFERENCES users(id)
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS parsers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                state TEXT NOT NULL DEFAULT 'DRAFT',
+                label TEXT DEFAULT NULL,
+                source_pdf_hash TEXT DEFAULT NULL,
+                coverage_score REAL DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS resume_versions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                yaml_content TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual_edit',
+                label TEXT DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS jd_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                jd_text TEXT NOT NULL,
+                match_score INTEGER DEFAULT NULL,
+                suggestions_json TEXT NOT NULL DEFAULT '[]',
+                applied_version_id INTEGER DEFAULT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (applied_version_id) REFERENCES resume_versions(id) ON DELETE SET NULL
             );
         ''')
         # SQLite migrations for existing databases
@@ -381,7 +448,7 @@ def get_mcp_api_key(user_id):
 def delete_user(user_id):
     """Delete a user account, settings, and all workspace data."""
     conn = get_db()
-    _execute(conn, f'DELETE FROM user_settings WHERE user_id = {PH}', (user_id,))
+    # ON DELETE CASCADE handles user_settings, parsers, resume_versions, jd_sessions
     _execute(conn, f'DELETE FROM users WHERE id = {PH}', (user_id,))
     conn.commit()
     conn.close()
@@ -389,3 +456,323 @@ def delete_user(user_id):
     user_dir = get_user_dir(user_id)
     if os.path.exists(user_dir):
         shutil.rmtree(user_dir)
+
+
+# ---------------------------------------------------------------------------
+# Parsers table — parser lifecycle (DRAFT → ACTIVE → LOCKED)
+# ---------------------------------------------------------------------------
+
+PARSER_STATES = ('DRAFT', 'ACTIVE', 'LOCKED')
+
+
+def create_parser(user_id, code, state='DRAFT', label=None, source_pdf_hash=None, coverage_score=None):
+    """Insert a new parser row and return its id."""
+    now = datetime.now().isoformat()
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor()
+        cur.execute(
+            f'INSERT INTO parsers (user_id, code, state, label, source_pdf_hash, coverage_score, created_at, updated_at) '
+            f'VALUES ({PH},{PH},{PH},{PH},{PH},{PH},{PH},{PH}) RETURNING id',
+            (user_id, code, state, label, source_pdf_hash, coverage_score, now, now)
+        )
+        parser_id = cur.fetchone()[0]
+        cur.close()
+    else:
+        cursor = conn.execute(
+            f'INSERT INTO parsers (user_id, code, state, label, source_pdf_hash, coverage_score, created_at, updated_at) '
+            f'VALUES ({PH},{PH},{PH},{PH},{PH},{PH},{PH},{PH})',
+            (user_id, code, state, label, source_pdf_hash, coverage_score, now, now)
+        )
+        parser_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return parser_id
+
+
+def get_parser_by_id(parser_id):
+    """Return parser row as dict or None."""
+    conn = get_db()
+    row = _fetchone(conn, f'SELECT * FROM parsers WHERE id = {PH}', (parser_id,))
+    conn.close()
+    return row
+
+
+def get_active_parser(user_id):
+    """Return the best parser for a user: LOCKED first, then ACTIVE, or None.
+
+    Only one parser should be LOCKED at a time. ACTIVE is the in-progress draft
+    the user is reviewing.
+    """
+    conn = get_db()
+    # Prefer LOCKED, fall back to ACTIVE (most recent)
+    row = _fetchone(
+        conn,
+        f"SELECT * FROM parsers WHERE user_id = {PH} AND state = 'LOCKED' ORDER BY updated_at DESC LIMIT 1",
+        (user_id,)
+    )
+    if not row:
+        row = _fetchone(
+            conn,
+            f"SELECT * FROM parsers WHERE user_id = {PH} AND state = 'ACTIVE' ORDER BY updated_at DESC LIMIT 1",
+            (user_id,)
+        )
+    conn.close()
+    return row
+
+
+def get_draft_parser(user_id):
+    """Return the most recent DRAFT parser for a user, or None."""
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        f"SELECT * FROM parsers WHERE user_id = {PH} AND state = 'DRAFT' ORDER BY created_at DESC LIMIT 1",
+        (user_id,)
+    )
+    conn.close()
+    return row
+
+
+def list_parsers(user_id):
+    """Return all parsers for a user (without code field) ordered newest first."""
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor(cursor_factory=__import__('psycopg2').extras.RealDictCursor)
+        cur.execute(
+            'SELECT id, user_id, state, label, source_pdf_hash, coverage_score, created_at, updated_at '
+            f'FROM parsers WHERE user_id = {PH} ORDER BY created_at DESC',
+            (user_id,)
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close()
+    else:
+        rows = conn.execute(
+            'SELECT id, user_id, state, label, source_pdf_hash, coverage_score, created_at, updated_at '
+            f'FROM parsers WHERE user_id = {PH} ORDER BY created_at DESC',
+            (user_id,)
+        ).fetchall()
+        rows = [dict(r) for r in rows]
+    conn.close()
+    return rows
+
+
+def update_parser_state(parser_id, state):
+    """Transition a parser to a new state. Validates against PARSER_STATES."""
+    if state not in PARSER_STATES:
+        raise ValueError(f"Invalid parser state: {state}. Must be one of {PARSER_STATES}")
+    now = datetime.now().isoformat()
+    conn = get_db()
+    _execute(conn,
+        f'UPDATE parsers SET state = {PH}, updated_at = {PH} WHERE id = {PH}',
+        (state, now, parser_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_parser_code(parser_id, code, coverage_score=None):
+    """Update a parser's code (and optionally its coverage score)."""
+    now = datetime.now().isoformat()
+    conn = get_db()
+    _execute(conn,
+        f'UPDATE parsers SET code = {PH}, coverage_score = {PH}, updated_at = {PH} WHERE id = {PH}',
+        (code, coverage_score, now, parser_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def lock_parser(user_id, parser_id):
+    """Lock a specific parser and demote any previously LOCKED parser to ACTIVE."""
+    now = datetime.now().isoformat()
+    conn = get_db()
+    # Demote all other LOCKED parsers for this user to ACTIVE
+    _execute(conn,
+        f"UPDATE parsers SET state = 'ACTIVE', updated_at = {PH} "
+        f"WHERE user_id = {PH} AND state = 'LOCKED' AND id != {PH}",
+        (now, user_id, parser_id)
+    )
+    # Lock the target parser
+    _execute(conn,
+        f"UPDATE parsers SET state = 'LOCKED', updated_at = {PH} WHERE id = {PH} AND user_id = {PH}",
+        (now, parser_id, user_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_parser(parser_id, user_id):
+    """Delete a parser. user_id is required as a security check."""
+    conn = get_db()
+    _execute(conn, f'DELETE FROM parsers WHERE id = {PH} AND user_id = {PH}', (parser_id, user_id))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Resume versions table
+# ---------------------------------------------------------------------------
+
+RESUME_SOURCES = ('upload', 'manual_edit', 'jd_applied', 'ai_edit')
+
+
+def save_resume_version(user_id, yaml_content, source='manual_edit', label=None):
+    """Persist a resume snapshot. Returns the new version id."""
+    if source not in RESUME_SOURCES:
+        source = 'manual_edit'
+    now = datetime.now().isoformat()
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor()
+        cur.execute(
+            f'INSERT INTO resume_versions (user_id, yaml_content, source, label, created_at) '
+            f'VALUES ({PH},{PH},{PH},{PH},{PH}) RETURNING id',
+            (user_id, yaml_content, source, label, now)
+        )
+        version_id = cur.fetchone()[0]
+        cur.close()
+    else:
+        cursor = conn.execute(
+            f'INSERT INTO resume_versions (user_id, yaml_content, source, label, created_at) '
+            f'VALUES ({PH},{PH},{PH},{PH},{PH})',
+            (user_id, yaml_content, source, label, now)
+        )
+        version_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return version_id
+
+
+def list_resume_versions(user_id):
+    """Return all versions for a user (without yaml_content) newest first."""
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor(cursor_factory=__import__('psycopg2').extras.RealDictCursor)
+        cur.execute(
+            f'SELECT id, user_id, source, label, created_at FROM resume_versions '
+            f'WHERE user_id = {PH} ORDER BY created_at DESC',
+            (user_id,)
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close()
+    else:
+        rows = conn.execute(
+            f'SELECT id, user_id, source, label, created_at FROM resume_versions '
+            f'WHERE user_id = {PH} ORDER BY created_at DESC',
+            (user_id,)
+        ).fetchall()
+        rows = [dict(r) for r in rows]
+    conn.close()
+    return rows
+
+
+def get_resume_version(version_id, user_id):
+    """Return a specific version dict (including yaml_content). user_id is a security check."""
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        f'SELECT * FROM resume_versions WHERE id = {PH} AND user_id = {PH}',
+        (version_id, user_id)
+    )
+    conn.close()
+    return row
+
+
+def get_latest_resume_version(user_id):
+    """Return the most recent resume version for a user, or None."""
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        f'SELECT * FROM resume_versions WHERE user_id = {PH} ORDER BY created_at DESC LIMIT 1',
+        (user_id,)
+    )
+    conn.close()
+    return row
+
+
+# ---------------------------------------------------------------------------
+# JD sessions table
+# ---------------------------------------------------------------------------
+
+def create_jd_session(user_id, jd_text):
+    """Create a new JD session and return its id."""
+    now = datetime.now().isoformat()
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor()
+        cur.execute(
+            f'INSERT INTO jd_sessions (user_id, jd_text, created_at) VALUES ({PH},{PH},{PH}) RETURNING id',
+            (user_id, jd_text, now)
+        )
+        session_id = cur.fetchone()[0]
+        cur.close()
+    else:
+        cursor = conn.execute(
+            f'INSERT INTO jd_sessions (user_id, jd_text, created_at) VALUES ({PH},{PH},{PH})',
+            (user_id, jd_text, now)
+        )
+        session_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return session_id
+
+
+def update_jd_session(session_id, match_score, suggestions):
+    """Attach analysis results to a JD session."""
+    conn = get_db()
+    _execute(conn,
+        f'UPDATE jd_sessions SET match_score = {PH}, suggestions_json = {PH} WHERE id = {PH}',
+        (match_score, json.dumps(suggestions), session_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def mark_jd_applied(session_id, version_id):
+    """Record which resume version was produced by applying this JD session."""
+    conn = get_db()
+    _execute(conn,
+        f'UPDATE jd_sessions SET applied_version_id = {PH} WHERE id = {PH}',
+        (version_id, session_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_jd_session(session_id, user_id):
+    """Return a JD session dict. user_id is a security check."""
+    conn = get_db()
+    row = _fetchone(
+        conn,
+        f'SELECT * FROM jd_sessions WHERE id = {PH} AND user_id = {PH}',
+        (session_id, user_id)
+    )
+    conn.close()
+    if row and isinstance(row.get('suggestions_json'), str):
+        row['suggestions'] = json.loads(row['suggestions_json'])
+    return row
+
+
+def list_jd_sessions(user_id):
+    """Return JD sessions for a user (without full jd_text) newest first."""
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor(cursor_factory=__import__('psycopg2').extras.RealDictCursor)
+        cur.execute(
+            f'SELECT id, user_id, match_score, applied_version_id, created_at, '
+            f'LEFT(jd_text, 200) as jd_preview FROM jd_sessions '
+            f'WHERE user_id = {PH} ORDER BY created_at DESC',
+            (user_id,)
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close()
+    else:
+        rows = conn.execute(
+            f'SELECT id, user_id, match_score, applied_version_id, created_at, '
+            f'SUBSTR(jd_text, 1, 200) as jd_preview FROM jd_sessions '
+            f'WHERE user_id = {PH} ORDER BY created_at DESC',
+            (user_id,)
+        ).fetchall()
+        rows = [dict(r) for r in rows]
+    conn.close()
+    return rows

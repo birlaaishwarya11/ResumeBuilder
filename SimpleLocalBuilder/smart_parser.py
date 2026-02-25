@@ -105,9 +105,9 @@ Return ONLY the updated Python function (no markdown fences, no explanation).
 # ---------------------------------------------------------------------------
 
 def _call_llm(provider, api_key, prompt, model=None):
-    """Thin wrapper around call_ai_provider from local_app."""
-    from local_app import call_ai_provider
-    return call_ai_provider(provider, api_key, '', prompt, model)
+    """Thin wrapper around ai_service.call_llm (no circular import to local_app)."""
+    from ai_service import call_llm
+    return call_llm(provider, api_key, '', prompt, model)
 
 
 def _clean_code(raw: str) -> str:

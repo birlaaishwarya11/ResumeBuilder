@@ -22,9 +22,10 @@ from pdf_parser import (extract_style_from_pdf,
                         _smart_parse_section, _normalize_section_key)
 from confidence import score_parsed_resume
 import sandbox as daytona_sandbox
-from models import get_user_parser, save_user_parser
 import smart_parser as sp
-from tools import tools_bp
+import parser_service
+from resume_service import save_current_resume as _save_resume
+import jd_service
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -42,10 +43,6 @@ except Exception:
     print(">>> FATAL: init_db() failed:", flush=True)
     traceback.print_exc()
     raise
-
-# Register blueprints
-app.register_blueprint(tools_bp)
-
 
 # --- Auth helpers ---
 
@@ -436,29 +433,53 @@ def upload_resume():
         parser_used = 'heuristic'
         generated_parser_code = None
 
-        # 2a. Check for a locked smart parser
-        stored_code, is_locked = get_user_parser(user_id)
-        if stored_code and is_locked:
-            print(f"[SmartParser] Using locked parser for user {user_id}")
-            result, final_code, sp_logs = sp.run_parser(
-                flat_lines, stored_code,
-                provider=sp_provider, api_key=sp_api_key, model=sp_model
-            )
-            sandbox_logs.extend(sp_logs)
-            if result is not None:
-                parsed = sp.normalize_dates(result)
-                parser_used = 'smart_locked'
-            else:
-                print("[SmartParser] Locked parser failed, falling back to heuristic")
-                parsed = parse_resume_from_extracted(extracted_data)
+        # 2a. Check for an ACTIVE or LOCKED parser via parser_service
+        best_parser = parser_service.get_best_parser(user_id)
+        if best_parser:
+            parser_state = best_parser['state']
+            print(f"[SmartParser] Using {parser_state} parser (id={best_parser['id']}) for user {user_id}")
+            if parser_state == 'LOCKED':
+                # Privacy-preserving path: extract + run + verify all inside one sandbox.
+                # Raw lines never leave the Daytona container.
+                verify_result, verify_logs = daytona_sandbox.extract_and_test_parser(
+                    pdf_path, best_parser['code']
+                )
+                sandbox_logs.extend(verify_logs)
+                if verify_result and verify_result.get('parsed'):
+                    parsed = sp.normalize_dates(verify_result['parsed'])
+                    parser_used = 'smart_locked'
+                    cov = verify_result.get('coverage_score', 0)
+                    print(f"[SmartParser] Locked parser coverage: {cov}%")
+                else:
+                    # LOCKED parser failed on this PDF — fall through to generation
+                    print("[SmartParser] Locked parser failed, regenerating...")
+                    best_parser = None
+            if best_parser and parser_state == 'ACTIVE':
+                result, final_code, sp_logs = parser_service.run_parser(
+                    best_parser['id'], user_id, flat_lines,
+                    provider=sp_provider, api_key=sp_api_key, model=sp_model
+                )
+                sandbox_logs.extend(sp_logs)
+                if result is not None:
+                    parsed = sp.normalize_dates(result)
+                    parser_used = 'smart_active'
+                else:
+                    print("[SmartParser] Active parser failed, falling back to heuristic")
+                    parsed = parse_resume_from_extracted(extracted_data)
 
-        # 2b. Generate a new smart parser (if credentials available)
-        elif sp_provider and sp_api_key:
+        # 2b. Generate a new smart parser (if credentials available and no usable parser)
+        if not best_parser and sp_provider and sp_api_key:
             print(f"[SmartParser] Generating new parser for user {user_id}")
             try:
-                code = sp.generate_parser_code(flat_lines, sp_provider, sp_api_key, sp_model)
-                result, final_code, sp_logs = sp.run_parser(
-                    flat_lines, code,
+                with open(pdf_path, 'rb') as _pf:
+                    _pdf_bytes = _pf.read()
+                parser_id, code, gen_logs = parser_service.generate_and_store_parser(
+                    user_id, flat_lines, sp_provider, sp_api_key, sp_model,
+                    pdf_bytes=_pdf_bytes
+                )
+                sandbox_logs.extend(gen_logs)
+                result, final_code, sp_logs = parser_service.run_parser(
+                    parser_id, user_id, flat_lines,
                     provider=sp_provider, api_key=sp_api_key, model=sp_model
                 )
                 sandbox_logs.extend(sp_logs)
@@ -466,9 +487,7 @@ def upload_resume():
                     parsed = sp.normalize_dates(result)
                     parser_used = 'smart_generated'
                     generated_parser_code = final_code
-                    # Store (unlocked) so user can review and confirm
-                    save_user_parser(user_id, final_code, locked=False)
-                    print(f"[SmartParser] Parser stored (unlocked) for user {user_id}")
+                    print(f"[SmartParser] Parser stored as DRAFT (id={parser_id}) for user {user_id}")
                 else:
                     print("[SmartParser] Generated parser failed, falling back to heuristic")
                     parsed = parse_resume_from_extracted(extracted_data)
@@ -477,8 +496,8 @@ def upload_resume():
                 print(f"[SmartParser] Generation failed ({ai_error_info['message']}), falling back to heuristic")
                 parsed = parse_resume_from_extracted(extracted_data)
 
-        # 2c. Heuristic fallback
-        else:
+        # 2c. Heuristic fallback (no parser, no credentials, or all above failed)
+        elif not best_parser and not (sp_provider and sp_api_key):
             parsed = parse_resume_from_extracted(extracted_data)
 
         if not parsed:
@@ -694,10 +713,10 @@ def complete_onboarding():
         if resume_yaml.strip():
             full_data = merge_header(resume_yaml, merged_header)
             full_yaml = yaml.dump(full_data, sort_keys=False, allow_unicode=True)
-            with open(os.path.join(user_dir, 'resume.yaml'), 'w') as f:
-                f.write(full_yaml)
+            # Use resume_service so the initial upload is versioned in the DB
+            _save_resume(user_id, full_yaml, source='upload', label='Initial upload')
 
-        # Clean up onboarding PDF
+        # Delete the raw PDF — PII no longer needed once YAML is saved
         onboarding_pdf = os.path.join(user_dir, 'onboarding_upload.pdf')
         if os.path.exists(onboarding_pdf):
             os.remove(onboarding_pdf)
@@ -1042,7 +1061,167 @@ def delete_profile():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# --- AI features ---
+# --- Parser state management ---
+
+@app.route('/api/parser/list', methods=['GET'])
+@login_required
+def list_parsers():
+    user_id = get_current_user_id()
+    parsers = parser_service.list_user_parsers(user_id)
+    return jsonify({"status": "success", "parsers": parsers})
+
+
+@app.route('/api/parser/activate', methods=['POST'])
+@login_required
+def activate_parser():
+    """Transition a DRAFT parser to ACTIVE (user confirmed content is correct)."""
+    user_id = get_current_user_id()
+    parser_id = request.json.get('parser_id')
+    if not parser_id:
+        return jsonify({"status": "error", "message": "parser_id required"}), 400
+    try:
+        parser_service.activate_parser(int(parser_id), user_id)
+        return jsonify({"status": "success", "message": "Parser is now ACTIVE"})
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route('/api/parser/lock', methods=['POST'])
+@login_required
+def lock_parser():
+    """ACTIVE/DRAFT → LOCKED: user confirmed this is their PDF layout."""
+    user_id = get_current_user_id()
+    parser_id = request.json.get('parser_id')
+    if not parser_id:
+        return jsonify({"status": "error", "message": "parser_id required"}), 400
+    try:
+        parser_service.confirm_and_lock(int(parser_id), user_id)
+        return jsonify({"status": "success", "message": "Parser locked"})
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route('/api/parser/unlock', methods=['POST'])
+@login_required
+def unlock_parser():
+    """LOCKED → ACTIVE: allow regeneration while keeping the code."""
+    user_id = get_current_user_id()
+    parser_id = request.json.get('parser_id')
+    if not parser_id:
+        return jsonify({"status": "error", "message": "parser_id required"}), 400
+    try:
+        parser_service.unlock_parser(int(parser_id), user_id)
+        return jsonify({"status": "success", "message": "Parser unlocked"})
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+@app.route('/api/parser/discard', methods=['POST'])
+@login_required
+def discard_parser():
+    """Delete a parser entirely."""
+    user_id = get_current_user_id()
+    parser_id = request.json.get('parser_id')
+    if not parser_id:
+        return jsonify({"status": "error", "message": "parser_id required"}), 400
+    try:
+        parser_service.discard_parser(int(parser_id), user_id)
+        return jsonify({"status": "success", "message": "Parser deleted"})
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+# --- Resume versioning ---
+
+@app.route('/api/versions', methods=['GET'])
+@login_required
+def list_versions():
+    from resume_service import list_versions as _list_versions
+    user_id = get_current_user_id()
+    versions = _list_versions(user_id)
+    return jsonify({"status": "success", "versions": versions})
+
+
+@app.route('/api/versions/restore', methods=['POST'])
+@login_required
+def restore_version():
+    from resume_service import restore_version as _restore
+    user_id = get_current_user_id()
+    version_id = request.json.get('version_id')
+    if not version_id:
+        return jsonify({"status": "error", "message": "version_id required"}), 400
+    try:
+        yaml_content = _restore(int(version_id), user_id)
+        return jsonify({"status": "success", "yaml": yaml_content})
+    except ValueError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+
+
+# --- JD analysis + application (new structured workflow) ---
+
+@app.route('/api/jd_analyze', methods=['POST'])
+@login_required
+def jd_analyze():
+    """Analyze the current resume against a JD. Returns match score + suggestions."""
+    user_id = get_current_user_id()
+    data = request.json
+    jd_text = data.get('jd_text', '').strip()
+    api_key = data.get('api_key', '').strip()
+    provider = data.get('provider', 'anthropic')
+    model = data.get('model', '') or None
+
+    if not jd_text:
+        return jsonify({"status": "error", "message": "jd_text is required"}), 400
+    if not api_key:
+        return jsonify({"status": "error", "message": "api_key is required"}), 400
+
+    try:
+        session_id, result, logs = jd_service.analyze(user_id, jd_text, provider, api_key, model)
+        return jsonify({
+            "status": "success",
+            "session_id": session_id,
+            "match_score": result['match_score'],
+            "suggestions": result['suggestions'],
+            "logs": logs,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/jd_apply', methods=['POST'])
+@login_required
+def jd_apply():
+    """Apply selected JD suggestions to the current resume. Saves a new version."""
+    user_id = get_current_user_id()
+    data = request.json
+    session_id = data.get('session_id')
+    suggestion_ids = data.get('suggestion_ids', [])
+    api_key = data.get('api_key', '').strip()
+    provider = data.get('provider', 'anthropic')
+    model = data.get('model', '') or None
+
+    if not session_id:
+        return jsonify({"status": "error", "message": "session_id is required"}), 400
+    if not suggestion_ids:
+        return jsonify({"status": "error", "message": "suggestion_ids is required"}), 400
+    if not api_key:
+        return jsonify({"status": "error", "message": "api_key is required"}), 400
+
+    try:
+        new_yaml, version_id, logs = jd_service.apply_suggestions(
+            user_id, int(session_id), suggestion_ids, provider, api_key, model
+        )
+        return jsonify({
+            "status": "success",
+            "yaml": new_yaml,
+            "version_id": version_id,
+            "logs": logs,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# --- AI features (existing) ---
 
 @app.route('/api/match_jd', methods=['POST'])
 @login_required
@@ -1367,114 +1546,21 @@ def download_pdf():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# --- AI provider helpers ---
+# --- AI provider helpers (delegates to ai_service — single implementation) ---
 
 def _extract_ai_error_info(e):
-    """Extract a user-facing error message and HTTP status code from an AI provider exception."""
-    msg = str(e)
-    status_code = None
-
-    # Anthropic: anthropic.APIStatusError has .status_code
-    if hasattr(e, 'status_code'):
-        status_code = e.status_code
-
-    # OpenAI: openai.APIError has .status_code
-    if status_code is None and hasattr(e, 'code'):
-        status_code = e.code
-
-    # Gemini / generic: try to pull leading "NNN " from message
-    if status_code is None:
-        import re
-        m = re.match(r'^(\d{3})\b', msg.strip())
-        if m:
-            status_code = int(m.group(1))
-
-    # Build a short, readable summary (first line only, cap at 300 chars)
-    short = msg.splitlines()[0][:300]
-
-    return {"message": short, "status_code": status_code}
+    from ai_service import extract_ai_error
+    return extract_ai_error(e)
 
 
 def call_ai_provider(provider, api_key, system_prompt, user_message, model=None):
-    if provider == 'anthropic':
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        model_name = model if model else "claude-3-haiku-20240307"
-        message = client.messages.create(
-            model=model_name,
-            max_tokens=4000,
-            temperature=0,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}]
-        )
-        return message.content[0].text
-
-    elif provider == 'openai':
-        import openai
-        client = openai.OpenAI(api_key=api_key)
-        model_name = model if model else "gpt-3.5-turbo"
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            temperature=0,
-            response_format={"type": "json_object"}
-        )
-        return completion.choices[0].message.content
-
-    elif provider == 'gemini':
-        from google import genai
-        from google.genai import types
-        # Use v1 so both gemini-1.5-* and gemini-2.0-* models are reachable.
-        # Note: v1 REST API rejects systemInstruction in GenerateContentConfig,
-        # so we fold the system prompt into the user message content directly.
-        client = genai.Client(
-            api_key=api_key,
-            http_options={'api_version': 'v1'},
-        )
-        model_name = model if model else 'gemini-2.0-flash'
-        # Combine system + user content (v1 doesn't accept system_instruction field)
-        content = (system_prompt + '\n\n' + user_message) if system_prompt else (user_message or system_prompt)
-        response = client.models.generate_content(
-            model=model_name,
-            contents=content,
-            config=types.GenerateContentConfig(temperature=0)
-        )
-        result = response.text
-        if result is None:
-            raise ValueError("Gemini returned an empty response (response may have been blocked by safety filters)")
-        return result
-
-    raise ValueError(f"Unknown provider: {provider}")
+    from ai_service import call_llm
+    return call_llm(provider, api_key, system_prompt, user_message, model)
 
 
 def parse_json_response(response_text):
-    import json
-    import re
-    response_text = response_text.replace("```json", "").replace("```", "")
-
-    try:
-        return json.loads(response_text)
-    except Exception:
-        pass
-
-    json_match_list = re.search(r'\[.*\]', response_text, re.DOTALL)
-    if json_match_list:
-        try:
-            return json.loads(json_match_list.group(0))
-        except Exception:
-            pass
-
-    json_match_obj = re.search(r'\{.*\}', response_text, re.DOTALL)
-    if json_match_obj:
-        try:
-            return json.loads(json_match_obj.group(0))
-        except Exception:
-            pass
-
-    return {}
+    from ai_service import parse_json_response as _parse
+    return _parse(response_text)
 
 
 if __name__ == '__main__':
