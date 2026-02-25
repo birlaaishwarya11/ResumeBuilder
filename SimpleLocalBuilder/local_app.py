@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from functools import wraps
+import traceback
 import yaml
 import os
 import json
@@ -33,7 +34,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
 # Initialize database on startup
-init_db()
+try:
+    init_db()
+    print(">>> DB init OK", flush=True)
+except Exception:
+    print(">>> FATAL: init_db() failed:", flush=True)
+    traceback.print_exc()
+    raise
 
 # Register blueprints
 app.register_blueprint(tools_bp)
