@@ -46,6 +46,9 @@ def get_db():
     else:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
+        # SQLite does NOT enforce foreign key constraints (including ON DELETE CASCADE)
+        # unless this PRAGMA is enabled per-connection.
+        conn.execute('PRAGMA foreign_keys = ON')
         return conn
 
 
