@@ -34,7 +34,10 @@ SECTION_KEYWORDS = {
                         "extracurricular activities /volunteer & research papers",
                         "extracurricular activities / volunteer & research papers",
                         "community involvement", "volunteer experience",
-                        "service & leadership", "civic engagement"],
+                        "service & leadership", "civic engagement",
+                        "co-curricular activities", "co-curricular", "co curricular activities",
+                        "co curricular", "co-curriculars", "activities & achievements",
+                        "activities and achievements", "participation"],
     "certifications": ["certifications", "certifications & licenses", "licenses",
                        "professional certifications", "certificates",
                        "technical certifications", "credentials",
@@ -44,7 +47,10 @@ SECTION_KEYWORDS = {
                      "journal publications", "conference papers",
                      "selected publications", "research publications",
                      "scholarly work", "bibliography",
-                     "presentations & publications", "conference presentations"],
+                     "presentations & publications", "conference presentations",
+                     "paper presentation", "paper presentations",
+                     "publications paper presentation", "publications and paper presentations",
+                     "publications or paper presentations"],
     "awards": ["awards", "awards & honors", "honors", "honors & awards",
                "achievements", "accomplishments", "recognitions",
                "scholarships", "fellowships", "grants",
@@ -112,6 +118,15 @@ DATE_RANGE_SHORT_RE = re.compile(
     r'(' + _MONTH_SHORT + r'[a-z]*)'
     r'\s*[-–—]\s*'
     r'(' + _MONTH_SHORT + r'[a-z]*)\s+(\d{4})',
+    re.IGNORECASE
+)
+_DAY = r'(?:\d{1,2}(?:st|nd|rd|th)?)'
+# Date range where year only appears at end: "Sept 1 - Sept 30, 2025" or "1 Sept - 30 Sept 2025"
+DATE_RANGE_WITH_DAY_RE = re.compile(
+    r'(?:' + _MONTH + r'\.?\s*' + _DAY + r'|' + _DAY + r'\s*' + _MONTH + r'\.?)'
+    r'\s*[-–—]\s*'
+    r'(?:' + _MONTH + r'\.?\s*' + _DAY + r'|' + _DAY + r'\s*' + _MONTH + r'\.?)'
+    r'\s*,?\s*(\d{4})',
     re.IGNORECASE
 )
 DEGREE_RE = re.compile(
@@ -558,6 +573,9 @@ def parse_experience_section(text_lines, line_meta=None):
         # Also try short ranges like "Aug-Dec 2025"
         if not date_match:
             date_match = DATE_RANGE_SHORT_RE.search(test_text)
+        # Also try "Month Day - Month Day, Year" (e.g. "Sept 1 - Sept 30, 2025")
+        if not date_match:
+            date_match = DATE_RANGE_WITH_DAY_RE.search(test_text)
 
         # Fallback: single date on a bold, non-bullet line
         if not date_match and is_bold_line and not is_bullet:
@@ -638,6 +656,8 @@ def parse_experience_section(text_lines, line_meta=None):
             role_date_match = DATE_RANGE_RE.search(test_text)
             if not role_date_match:
                 role_date_match = DATE_RANGE_SHORT_RE.search(test_text)
+            if not role_date_match:
+                role_date_match = DATE_RANGE_WITH_DAY_RE.search(test_text)
             if not role_date_match:
                 role_date_match = DATE_RE.search(test_text)
 
@@ -746,7 +766,10 @@ def parse_projects_section(text_lines, line_meta=None):
         if date_tail:
             test_text = main_part + ' ' + date_tail
 
-        date_match = DATE_RE.search(test_text)
+        date_match = (DATE_RANGE_RE.search(test_text)
+                      or DATE_RANGE_SHORT_RE.search(test_text)
+                      or DATE_RANGE_WITH_DAY_RE.search(test_text)
+                      or DATE_RE.search(test_text))
         has_pipes = '|' in stripped
         is_bold_line = line_meta[idx]['bold'] if line_meta and idx < len(line_meta) else False
 
@@ -819,9 +842,17 @@ def _smart_parse_section(text_lines, line_meta=None):
     if not text_lines:
         return 'bullets', []
 
-    non_empty = [l for l in text_lines if l.strip()]
-    if not non_empty:
+    # Build a filtered list that keeps text/meta in sync (empty lines skipped together)
+    pairs = [
+        (l, (line_meta[i] if line_meta and i < len(line_meta) else {}))
+        for i, l in enumerate(text_lines)
+        if l.strip()
+    ]
+    if not pairs:
         return 'bullets', []
+
+    non_empty = [l for l, _ in pairs]
+    non_empty_meta = [m for _, m in pairs]
 
     # Check if >40% lines have "Category: items" pattern → skills
     colon_count = sum(1 for l in non_empty if re.match(r'^[^:]{2,30}:\s+.+', l.strip()))
@@ -829,24 +860,33 @@ def _smart_parse_section(text_lines, line_meta=None):
         return 'skills', parse_skills_section(text_lines)
 
     # Check for pipe-separated headers (project-like entries)
-    # e.g., "Real-time Fraud Detection | British Bank"
-    pipe_count = sum(1 for l in non_empty if '|' in l.strip() and not l.strip()[0] in BULLET_CHARS and not l.strip().startswith('- '))
-    has_dates = any(DATE_RE.search(l) or DATE_RANGE_RE.search(l) for l in non_empty)
-    has_bold = line_meta and any(m.get('bold', False) for m in line_meta if m.get('text', '').strip())
+    pipe_count = sum(1 for l in non_empty
+                     if '|' in l.strip()
+                     and l.strip()[0] not in BULLET_CHARS
+                     and not l.strip().startswith('- '))
+    has_bold = any(m.get('bold', False) for m in non_empty_meta)
 
     if pipe_count >= 1:
         return 'entries', parse_projects_section(text_lines, line_meta=line_meta)
 
     # Check if lines have date ranges → entries (experience-like)
-    date_count = sum(1 for l in non_empty if DATE_RANGE_RE.search(l) or DATE_RANGE_SHORT_RE.search(l) or DATE_RE.search(l))
+    date_count = sum(1 for l in non_empty
+                     if DATE_RANGE_RE.search(l)
+                     or DATE_RANGE_SHORT_RE.search(l)
+                     or DATE_RANGE_WITH_DAY_RE.search(l)
+                     or DATE_RE.search(l))
     if date_count >= 1:
         return 'entries', parse_experience_section(text_lines, line_meta=line_meta)
 
     # Check for bold non-bullet headers (project/entry-like even without dates/pipes)
     if has_bold:
-        bold_non_bullet = sum(1 for i, l in enumerate(non_empty)
-                              if line_meta and i < len(line_meta) and line_meta[i].get('bold', False)
-                              and l.strip() and l.strip()[0] not in BULLET_CHARS and not l.strip().startswith('- '))
+        bold_non_bullet = sum(
+            1 for l, m in pairs
+            if m.get('bold', False)
+            and l.strip()
+            and l.strip()[0] not in BULLET_CHARS
+            and not l.strip().startswith('- ')
+        )
         if bold_non_bullet >= 1:
             return 'entries', parse_projects_section(text_lines, line_meta=line_meta)
 

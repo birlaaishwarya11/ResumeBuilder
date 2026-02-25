@@ -13,19 +13,21 @@ POST /tools/test_parser       – run a parse() function on lines in Daytona (or
 POST /tools/refine_parser     – ask LLM to modify an existing parse() function
 POST /tools/normalize_dates   – walk a parsed dict and add _date_parsed fields
 POST /tools/lock_parser       – store a parser in the DB and mark it locked
+POST /tools/parse_resume      – full pipeline: extract → parse → YAML (for testing)
 """
 
 import os
 import json
 import tempfile
 
+import yaml
 from flask import Blueprint, request, jsonify, session
 
 from models import (
     get_user_parser, save_user_parser, clear_user_parser, get_user_dir,
 )
 import sandbox as daytona_sandbox
-from pdf_parser import extract_text_local
+from pdf_parser import extract_text_local, parse_resume_from_extracted
 import smart_parser as sp
 
 tools_bp = Blueprint('tools', __name__, url_prefix='/tools')
@@ -394,9 +396,18 @@ def lock_parser():
     code = body.get('code', '').strip()
 
     if action == 'lock':
-        if not code:
-            return jsonify({"status": "error", "message": "'code' is required to lock a parser."}), 400
-        save_user_parser(uid, code, locked=True)
+        if code:
+            # Caller provided new code — save and lock it
+            save_user_parser(uid, code, locked=True)
+        else:
+            # No code in body: lock whatever is already stored (e.g. code saved during upload)
+            existing_code, _ = get_user_parser(uid)
+            if not existing_code:
+                return jsonify({
+                    "status": "error",
+                    "message": "No parser stored yet. Upload a PDF first so a parser can be generated."
+                }), 400
+            save_user_parser(uid, existing_code, locked=True)
         return jsonify({"status": "success", "action": "lock", "has_code": True})
 
     if action == 'unlock':
@@ -440,4 +451,135 @@ def parser_status():
         "has_parser": bool(code),
         "locked": bool(locked),
         "code_preview": code[:300] if code else None,
+    })
+
+
+# ---------------------------------------------------------------------------
+# 8. POST /tools/parse_resume  — full pipeline test (extract → parse → YAML)
+# ---------------------------------------------------------------------------
+
+@tools_bp.route('/parse_resume', methods=['POST'])
+def parse_resume():
+    """
+    Full pipeline test: upload a PDF, extract text, run the parser (heuristic or
+    smart), and return the resulting YAML plus the raw extracted lines.
+
+    Useful for verifying parser quality without going through the full onboarding UI.
+
+    Accepts multipart/form-data:
+        resume_pdf     – PDF file (required)
+        parser         – "heuristic" | "smart" | "auto" (default: "auto")
+                         auto = use locked parser if available, else smart if keys
+                         available, else heuristic
+        provider       – AI provider (for smart parser; optional)
+        api_key        – AI API key  (for smart parser; optional)
+        model          – AI model    (for smart parser; optional)
+
+    Returns:
+        {
+          "status": "success",
+          "yaml": "<YAML string>",
+          "parsed": { ... },           // structured dict
+          "parser_used": "heuristic" | "smart_locked" | "smart_generated" | "heuristic_fallback",
+          "extraction_source": "sandbox" | "local",
+          "flat_lines": [...],         // raw extracted lines for debugging
+          "logs": [...]
+        }
+    """
+    uid, err_resp, err_code = _require_auth()
+    if err_resp:
+        return err_resp, err_code
+
+    pdf_file = request.files.get('resume_pdf')
+    if not pdf_file or not pdf_file.filename.lower().endswith('.pdf'):
+        return jsonify({"status": "error", "message": "A PDF file is required (field: resume_pdf)."}), 400
+
+    parser_mode = request.form.get('parser', 'auto')
+    user_provider = request.form.get('provider', '')
+    user_api_key = request.form.get('api_key', '')
+    user_model = request.form.get('model', '')
+
+    # Save PDF
+    user_dir = get_user_dir(uid)
+    os.makedirs(user_dir, exist_ok=True)
+    pdf_path = os.path.join(user_dir, 'onboarding_upload.pdf')
+    pdf_file.save(pdf_path)
+
+    # Step 1: Extract text
+    logs = []
+    extracted, sandbox_logs = daytona_sandbox.extract_text_in_sandbox(pdf_path)
+    logs.extend(sandbox_logs or [])
+    source = 'sandbox'
+
+    if not extracted:
+        extracted = extract_text_local(pdf_path)
+        source = 'local'
+        logs.append("Sandbox unavailable, used local extraction")
+
+    if not extracted or not extracted.get('pages'):
+        return jsonify({"status": "error", "message": "Could not extract text from the PDF."}), 500
+
+    flat_lines = []
+    for page in extracted.get('pages', []):
+        flat_lines.extend(page.get('lines', []))
+
+    # Step 2: Parse
+    sp_provider, sp_api_key, sp_model = sp.resolve_parser_credentials(
+        user_provider, user_api_key, user_model
+    )
+    parsed = None
+    parser_used = 'heuristic'
+
+    if parser_mode in ('auto', 'smart'):
+        # Try locked parser first (if auto)
+        if parser_mode == 'auto':
+            stored_code, is_locked = get_user_parser(uid)
+            if stored_code and is_locked:
+                result, _code, sp_logs = sp.run_parser(
+                    flat_lines, stored_code,
+                    provider=sp_provider, api_key=sp_api_key, model=sp_model
+                )
+                logs.extend(sp_logs)
+                if result is not None:
+                    parsed = sp.normalize_dates(result)
+                    parser_used = 'smart_locked'
+                else:
+                    logs.append("Locked parser failed, falling back")
+
+        # Generate a new smart parser if credentials available
+        if parsed is None and sp_provider and sp_api_key:
+            try:
+                code = sp.generate_parser_code(flat_lines, sp_provider, sp_api_key, sp_model)
+                result, _code, sp_logs = sp.run_parser(
+                    flat_lines, code,
+                    provider=sp_provider, api_key=sp_api_key, model=sp_model
+                )
+                logs.extend(sp_logs)
+                if result is not None:
+                    parsed = sp.normalize_dates(result)
+                    parser_used = 'smart_generated'
+                else:
+                    logs.append("Generated parser failed, falling back to heuristic")
+            except Exception as e:
+                logs.append(f"Smart parser error: {e}")
+
+    if parsed is None:
+        parsed = parse_resume_from_extracted(extracted)
+        parser_used = 'heuristic' if parser_mode == 'heuristic' else 'heuristic_fallback'
+
+    if not parsed:
+        return jsonify({"status": "error", "message": "Parser returned no data."}), 500
+
+    # Remove internal keys before serialising
+    parsed_clean = {k: v for k, v in parsed.items() if not k.startswith('_')}
+    yaml_str = yaml.dump(parsed_clean, sort_keys=False, allow_unicode=True)
+
+    return jsonify({
+        "status": "success",
+        "yaml": yaml_str,
+        "parsed": parsed_clean,
+        "parser_used": parser_used,
+        "extraction_source": source,
+        "flat_lines": flat_lines,
+        "logs": logs,
     })

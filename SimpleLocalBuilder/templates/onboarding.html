@@ -291,18 +291,7 @@
                 <button id="lock-parser-btn" class="btn btn-success" style="font-size:0.8em; padding:5px 12px; display:none;" onclick="lockParser()">Confirm &amp; Lock Parser</button>
                 <button id="unlock-parser-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px; display:none;" onclick="unlockParser()">Unlock</button>
                 <button id="clear-parser-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="clearParserFromReview()">Clear Parser</button>
-                <button id="toggle-code-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="toggleParserCode()">Show Code</button>
             </div>
-        </div>
-        <!-- Collapsible code panel -->
-        <div id="parser-code-panel" style="display:none; margin-top:10px;">
-            <pre id="parser-code-display" style="background:#1e1e1e; color:#d4d4d4; padding:12px; border-radius:6px; font-size:0.78em; max-height:260px; overflow:auto; white-space:pre-wrap; word-break:break-all;"></pre>
-            <!-- Refine chat inside code panel -->
-            <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-                <input type="text" id="refine-input" placeholder="Describe a change to the parser (e.g. also extract the summary section)..." style="flex:1; padding:7px 12px; font-size:0.85em; border:1px solid #ddd; border-radius:6px;">
-                <button id="refine-btn" class="btn btn-primary" style="font-size:0.8em; padding:7px 14px; white-space:nowrap;" onclick="refineParser()">Refine</button>
-            </div>
-            <div class="file-note" style="margin-top:4px;">Requires an AI API key. Describe what you want the parser to do differently, then re-test by re-uploading.</div>
         </div>
     </div>
 
@@ -592,12 +581,15 @@
         });
     }
 
-    // Show review step
+    // Show review step — verifies that the preview renders correctly before display
     function showReviewStep() {
-        document.getElementById('upload-step').style.display = 'none';
-        document.getElementById('review-step').style.display = 'flex';
-
+        // Initialise editor (hidden) so we can populate it before the step is shown
         if (!yamlEditor) {
+            // Reveal review-step off-screen so Ace can measure, then hide again
+            var reviewEl = document.getElementById('review-step');
+            reviewEl.style.display = 'flex';
+            reviewEl.style.visibility = 'hidden';
+
             yamlEditor = ace.edit('yaml-editor');
             yamlEditor.setTheme('ace/theme/chrome');
             yamlEditor.session.setMode('ace/mode/yaml');
@@ -610,16 +602,19 @@
                 clearTimeout(previewTimeout);
                 previewTimeout = setTimeout(updatePreview, 800);
             });
+
+            reviewEl.style.display = 'none';
+            reviewEl.style.visibility = '';
         }
 
         yamlEditor.setValue(parsedData.yaml, -1);
 
         renderConfidence(parsedData.confidence);
 
-        // Show smart parser panel if applicable
+        // Show smart parser panel state (set before the step is visible)
         updateSmartParserPanel(
             parsedData.parser_used,
-            parsedData.generated_parser_code || null,
+            null,
             parsedData.parser_used === 'smart_locked'
         );
 
@@ -629,7 +624,47 @@
             document.getElementById('ai-change-bar').style.display = 'block';
         }
 
-        updatePreview();
+        // --- Pre-display verification: render preview first, then show the step ---
+        fetch('/api/preview', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                resume: parsedData.yaml,
+                style: parsedData.style,
+                header: parsedData.header,
+                section_names: parsedData.section_names,
+                custom_sections: parsedData.custom_sections
+            })
+        })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Preview render failed (' + r.status + ')');
+            return r.text();
+        })
+        .then(function(html) {
+            // Write preview into iframe before revealing the step
+            var iframe = document.getElementById('preview-frame');
+            var doc = iframe.contentDocument || iframe.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+
+            // Content consistency check: name in YAML should appear in rendered HTML
+            var name = (parsedData.header && parsedData.header.name) ? parsedData.header.name.trim() : '';
+            if (name && html.indexOf(name) === -1) {
+                showToast('Preview may not reflect all parsed content. You can still edit the YAML.', 'warning');
+            }
+
+            // All good — reveal the review step
+            document.getElementById('upload-step').style.display = 'none';
+            document.getElementById('review-step').style.display = 'flex';
+        })
+        .catch(function(err) {
+            // Preview failed but we still show the step so the user can edit
+            console.error('Preview verification error:', err);
+            showToast('Preview could not be rendered. Check the YAML for errors.', 'error');
+            document.getElementById('upload-step').style.display = 'none';
+            document.getElementById('review-step').style.display = 'flex';
+        });
     }
 
     // Re-upload button
@@ -642,8 +677,6 @@
         document.getElementById('parse-options').style.display = 'none';
         document.getElementById('ai-error-panel').style.display = 'none';
         document.getElementById('smart-parser-panel').style.display = 'none';
-        document.getElementById('parser-code-panel').style.display = 'none';
-        document.getElementById('toggle-code-btn').textContent = 'Show Code';
         document.getElementById('search-result').style.display = 'none';
         document.getElementById('section-hint').value = '';
         lastSearchSnippet = '';
@@ -747,10 +780,6 @@
         if (e.key === 'Enter') { e.preventDefault(); applyAIChange(); }
     });
 
-    // Enter key triggers parser refine
-    document.getElementById('refine-input').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); refineParser(); }
-    });
 
     // -----------------------------------------------------------------------
     // Smart parser helpers
@@ -768,13 +797,12 @@
             .catch(function() {});
     })();
 
-    function updateSmartParserPanel(parserUsed, code, locked) {
+    function updateSmartParserPanel(parserUsed, _code, locked) {
         var panel = document.getElementById('smart-parser-panel');
         var icon = document.getElementById('parser-status-icon');
         var label = document.getElementById('parser-status-label');
         var lockBtn = document.getElementById('lock-parser-btn');
         var unlockBtn = document.getElementById('unlock-parser-btn');
-        var codeDisplay = document.getElementById('parser-code-display');
 
         if (!parserUsed || parserUsed === 'heuristic') {
             panel.style.display = 'none';
@@ -782,7 +810,6 @@
         }
 
         panel.style.display = 'block';
-        codeDisplay.textContent = code || '';
 
         if (parserUsed === 'smart_locked') {
             icon.textContent = '\uD83D\uDD12';
@@ -791,36 +818,23 @@
             unlockBtn.style.display = 'inline-block';
         } else if (parserUsed === 'smart_generated') {
             icon.textContent = '\u2728';
-            label.textContent = 'New custom parser generated. Review and lock it to reuse for future uploads.';
+            label.textContent = 'Custom parser generated. Confirm & Lock to reuse it for future uploads.';
             lockBtn.style.display = 'inline-block';
             unlockBtn.style.display = 'none';
         }
     }
 
-    function toggleParserCode() {
-        var panel = document.getElementById('parser-code-panel');
-        var btn = document.getElementById('toggle-code-btn');
-        if (panel.style.display === 'none') {
-            panel.style.display = 'block';
-            btn.textContent = 'Hide Code';
-        } else {
-            panel.style.display = 'none';
-            btn.textContent = 'Show Code';
-        }
-    }
-
     function lockParser() {
-        var code = document.getElementById('parser-code-display').textContent;
-        if (!code) { showToast('No parser code to lock.', 'error'); return; }
-
         var btn = document.getElementById('lock-parser-btn');
         btn.disabled = true;
         btn.textContent = 'Locking...';
 
+        // The parser code is already stored server-side (saved during upload).
+        // We just need to flip its locked flag — no code required in the request body.
         fetch('/tools/lock_parser', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'lock', code: code })
+            body: JSON.stringify({ action: 'lock' })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
@@ -902,61 +916,6 @@
             }
         })
         .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
-    }
-
-    function refineParser() {
-        var changeText = document.getElementById('refine-input').value.trim();
-        if (!changeText) { showToast('Describe what you want to change about the parser.', 'error'); return; }
-
-        var apiKey = document.getElementById('ai-api-key').value.trim();
-        if (!apiKey) {
-            showToast('An AI API key is required. Expand the AI settings in the upload step.', 'error');
-            return;
-        }
-
-        var currentCode = document.getElementById('parser-code-display').textContent;
-        if (!currentCode) { showToast('No parser code to refine.', 'error'); return; }
-
-        var btn = document.getElementById('refine-btn');
-        btn.disabled = true;
-        btn.textContent = 'Refining...';
-
-        fetch('/tools/refine_parser', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                code: currentCode,
-                change_request: changeText,
-                provider: document.getElementById('ai-provider').value,
-                api_key: apiKey,
-                model: getSelectedModel()
-            })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            btn.disabled = false;
-            btn.textContent = 'Refine';
-            if (data.status === 'success') {
-                document.getElementById('parser-code-display').textContent = data.code;
-                // Auto-save refined code (unlocked) so it persists
-                fetch('/tools/lock_parser', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'unlock', code: data.code })
-                });
-                document.getElementById('refine-input').value = '';
-                document.getElementById('lock-parser-btn').style.display = 'inline-block';
-                document.getElementById('parser-status-label').textContent = 'Parser refined. Review the YAML and lock when satisfied.';
-                showToast('Parser updated. Re-upload your PDF to see the new result.', 'success');
-            } else {
-                showToast('Error: ' + data.message, 'error');
-            }
-        })
-        .catch(function(err) {
-            btn.disabled = false;
-            btn.textContent = 'Refine';
-            showToast('Failed: ' + err.message, 'error');
-        });
     }
 
     // Preview update
