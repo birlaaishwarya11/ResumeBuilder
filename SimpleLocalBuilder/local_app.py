@@ -1406,8 +1406,13 @@ def call_ai_provider(provider, api_key, system_prompt, user_message, model=None)
     elif provider == 'gemini':
         from google import genai
         from google.genai import types
-        client = genai.Client(api_key=api_key)
-        model_name = model if model else 'gemini-1.5-flash'
+        # Use v1 so both gemini-1.5-* and gemini-2.0-* models are reachable.
+        # The default v1beta only has gemini-2.0-* series.
+        client = genai.Client(
+            api_key=api_key,
+            http_options={'api_version': 'v1'},
+        )
+        model_name = model if model else 'gemini-2.0-flash'
         config_kwargs = {'temperature': 0}
         if system_prompt:  # Gemini SDK rejects empty string system_instruction
             config_kwargs['system_instruction'] = system_prompt
