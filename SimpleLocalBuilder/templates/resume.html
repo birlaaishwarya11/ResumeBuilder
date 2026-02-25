@@ -246,25 +246,33 @@
 
     {% if cs.render_type == 'entries' and cs_data is iterable and cs_data is not string %}
     {% for entry in cs_data %}
+    {% if entry is mapping %}
     <div class="custom-entry-item">
         <div class="row">
             <div class="left">
-                <strong>{{ entry.company or entry.institution or entry.name or entry.title or '' }}</strong>
+                <strong>{{ entry.company or entry.organization or entry.institution or entry.name or entry.title or entry.position or '' }}</strong>
                 {% if entry.role %}, <strong>{{ entry.role }}</strong>{% endif %}
                 {% if entry.event %} | <strong>{{ entry.event }}</strong>{% endif %}
                 {% if entry.award %} | <strong>{{ entry.award }}</strong>{% endif %}
                 {% if entry.location %}, {{ entry.location }}{% endif %}
             </div>
-            <div class="right date-italic">{{ entry.date or '' }}</div>
+            <div class="right date-italic">{{ entry.date or entry.dates or '' }}</div>
         </div>
-        {% if entry.bullets %}
+        {% set sub_bullets = entry.bullets or entry.description %}
+        {% if sub_bullets %}
         <ul>
-            {% for bullet in entry.bullets %}
-            <li>{{ bullet }}</li>
-            {% endfor %}
+            {% if sub_bullets is iterable and sub_bullets is not string %}
+                {% for bullet in sub_bullets %}<li>{{ bullet }}</li>{% endfor %}
+            {% else %}
+                <li>{{ sub_bullets }}</li>
+            {% endif %}
         </ul>
         {% endif %}
     </div>
+    {% else %}
+    {# Defensive: string fell into entries list — render as plain bullet #}
+    <ul><li>{{ entry }}</li></ul>
+    {% endif %}
     {% endfor %}
 
     {% elif cs.render_type == 'skills' and cs_data is iterable and cs_data is not string %}
@@ -275,7 +283,7 @@
     {% endfor %}
 
     {% else %}
-    {# bullets (default) - handle both list and dict with bullets key #}
+    {# bullets (default) — Overleaf principle: always render something useful, never raw dicts #}
     {% if cs_data is mapping and cs_data.bullets %}
     <ul>
         {% for bullet in cs_data.bullets %}
@@ -283,11 +291,21 @@
         {% endfor %}
     </ul>
     {% elif cs_data is iterable and cs_data is not string %}
-    <ul>
         {% for item in cs_data %}
-        <li>{{ item }}</li>
+            {% if item is mapping %}
+                {# dict slipped through render_type detection — render title + sub-bullets #}
+                {% set heading = item.title or item.name or item.heading or '' %}
+                {% if heading %}<div style="margin-top:5px; font-weight:600;">{{ heading }}</div>{% endif %}
+                {% set sub = item.bullets or item.description %}
+                {% if sub is iterable and sub is not string %}
+                <ul>{% for b in sub %}<li>{{ b }}</li>{% endfor %}</ul>
+                {% elif sub %}
+                <ul><li>{{ sub }}</li></ul>
+                {% endif %}
+            {% else %}
+            <ul><li>{{ item }}</li></ul>
+            {% endif %}
         {% endfor %}
-    </ul>
     {% endif %}
     {% endif %}
 

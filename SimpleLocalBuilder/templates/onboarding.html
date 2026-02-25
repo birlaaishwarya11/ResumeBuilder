@@ -271,18 +271,6 @@
     </div>
     <div id="confidence-bar" class="confidence-bar" style="display:none;"></div>
 
-    <!-- Smart parser panel (shown after smart parser generates/uses code) -->
-    <div id="smart-parser-panel" style="display:none; margin:0 0 0 0; padding:10px 20px; background:#f0f7ff; border-bottom:1px solid #b3d4f5;">
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <span id="parser-status-icon" style="font-size:1em; flex-shrink:0;">&#129513;</span>
-            <span id="parser-status-label" style="font-size:0.85em; color:#1565c0; font-weight:600; flex:1;"></span>
-            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <button id="lock-parser-btn" class="btn btn-success" style="font-size:0.8em; padding:5px 12px; display:none;" onclick="lockParser()">Confirm &amp; Lock Parser</button>
-                <button id="unlock-parser-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px; display:none;" onclick="unlockParser()">Unlock</button>
-                <button id="clear-parser-btn" class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="clearParserFromReview()">Clear Parser</button>
-            </div>
-        </div>
-    </div>
 
     <div class="review-body">
         <div class="review-left">
@@ -590,13 +578,6 @@
 
         renderConfidence(parsedData.confidence);
 
-        // Show smart parser panel state
-        updateSmartParserPanel(
-            parsedData.parser_used,
-            null,
-            parsedData.parser_used === 'smart_locked'
-        );
-
         // Show AI change bar if API key was provided
         var apiKey = document.getElementById('ai-api-key').value.trim();
         if (apiKey) {
@@ -660,7 +641,6 @@
         document.getElementById('parse-btn').disabled = true;
         document.getElementById('parse-options').style.display = 'none';
         document.getElementById('ai-error-panel').style.display = 'none';
-        document.getElementById('smart-parser-panel').style.display = 'none';
         document.getElementById('search-result').style.display = 'none';
         document.getElementById('section-hint').value = '';
         lastSearchSnippet = '';
@@ -769,128 +749,6 @@
     // Smart parser helpers
     // -----------------------------------------------------------------------
 
-    function updateSmartParserPanel(parserUsed, _code, locked) {
-        var panel = document.getElementById('smart-parser-panel');
-        var icon = document.getElementById('parser-status-icon');
-        var label = document.getElementById('parser-status-label');
-        var lockBtn = document.getElementById('lock-parser-btn');
-        var unlockBtn = document.getElementById('unlock-parser-btn');
-
-        // Always reset label/buttons first so stale text from unlock/lock actions is cleared
-        icon.textContent = '';
-        label.textContent = '';
-        lockBtn.style.display = 'none';
-        unlockBtn.style.display = 'none';
-
-        if (!parserUsed || parserUsed === 'heuristic') {
-            panel.style.display = 'none';
-            return;
-        }
-
-        panel.style.display = 'block';
-
-        if (parserUsed === 'smart_locked') {
-            icon.textContent = '\uD83D\uDD12';
-            label.textContent = 'Using your confirmed custom parser.';
-            lockBtn.style.display = 'none';
-            unlockBtn.style.display = 'inline-block';
-        } else if (parserUsed === 'smart_generated') {
-            icon.textContent = '\u2728';
-            label.textContent = 'Custom parser generated. Confirm & Lock to reuse it for future uploads.';
-            lockBtn.style.display = 'inline-block';
-            unlockBtn.style.display = 'none';
-        }
-    }
-
-    function lockParser() {
-        var btn = document.getElementById('lock-parser-btn');
-        btn.disabled = true;
-        btn.textContent = 'Locking...';
-
-        // The parser code is already stored server-side (saved during upload).
-        // We just need to flip its locked flag — no code required in the request body.
-        fetch('/tools/lock_parser', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'lock' })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            btn.disabled = false;
-            if (data.status === 'success') {
-                btn.style.display = 'none';
-                document.getElementById('unlock-parser-btn').style.display = 'inline-block';
-                document.getElementById('parser-status-icon').textContent = '\uD83D\uDD12';
-                document.getElementById('parser-status-label').textContent = 'Parser locked. It will be reused for future uploads.';
-                showToast('Parser locked! It will be reused for future uploads.', 'success');
-            } else {
-                btn.textContent = 'Confirm & Lock Parser';
-                showToast('Error: ' + data.message, 'error');
-            }
-        })
-        .catch(function(err) {
-            btn.disabled = false;
-            btn.textContent = 'Confirm & Lock Parser';
-            showToast('Failed: ' + err.message, 'error');
-        });
-    }
-
-    function unlockParser() {
-        fetch('/tools/lock_parser', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'unlock' })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.status === 'success') {
-                document.getElementById('unlock-parser-btn').style.display = 'none';
-                document.getElementById('lock-parser-btn').style.display = 'inline-block';
-                document.getElementById('lock-parser-btn').textContent = 'Confirm & Lock Parser';
-                document.getElementById('parser-status-icon').textContent = '\u2728';
-                document.getElementById('parser-status-label').textContent = 'Parser unlocked. Lock it again after reviewing.';
-                showToast('Parser unlocked.', 'info');
-            } else {
-                showToast('Error: ' + data.message, 'error');
-            }
-        })
-        .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
-    }
-
-    function clearLockedParser() {
-        if (!confirm('Clear the locked parser? Next upload will generate a new one (requires API key).')) return;
-        fetch('/tools/lock_parser', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'clear' })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.status === 'success') {
-                showToast('Parser cleared. A new one will be generated on next upload.', 'info');
-            } else {
-                showToast('Error: ' + data.message, 'error');
-            }
-        })
-        .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
-    }
-
-    function clearParserFromReview() {
-        if (!confirm('Clear parser? Next upload will regenerate it.')) return;
-        fetch('/tools/lock_parser', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'clear' })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.status === 'success') {
-                document.getElementById('smart-parser-panel').style.display = 'none';
-                showToast('Parser cleared.', 'info');
-            }
-        })
-        .catch(function(err) { showToast('Failed: ' + err.message, 'error'); });
-    }
 
     // Preview update
     function updatePreview() {

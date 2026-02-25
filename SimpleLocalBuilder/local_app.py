@@ -136,7 +136,12 @@ def _infer_render_type(data):
         if data and isinstance(data[0], dict):
             if 'category' in data[0] and 'skills' in data[0]:
                 return 'skills'
-            if any(k in data[0] for k in ('company', 'role', 'institution', 'degree', 'date', 'name', 'event', 'award')):
+            # Sections whose items are dicts with any recognised structural key
+            # are treated as 'entries' (title+bullets, experience-style, etc.)
+            _ENTRY_KEYS = ('company', 'role', 'institution', 'degree', 'date',
+                           'name', 'event', 'award', 'title', 'description',
+                           'organization', 'position', 'location')
+            if any(k in data[0] for k in _ENTRY_KEYS):
                 return 'entries'
         return 'bullets'
     if isinstance(data, dict) and 'bullets' in data:
