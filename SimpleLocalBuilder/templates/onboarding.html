@@ -657,6 +657,8 @@
             // All good — reveal the review step
             document.getElementById('upload-step').style.display = 'none';
             document.getElementById('review-step').style.display = 'flex';
+            // Ace Editor needs a resize signal after its container becomes visible
+            if (yamlEditor) { setTimeout(function() { yamlEditor.resize(); }, 50); }
         })
         .catch(function(err) {
             // Preview failed but we still show the step so the user can edit
@@ -664,6 +666,7 @@
             showToast('Preview could not be rendered. Check the YAML for errors.', 'error');
             document.getElementById('upload-step').style.display = 'none';
             document.getElementById('review-step').style.display = 'flex';
+            if (yamlEditor) { setTimeout(function() { yamlEditor.resize(); }, 50); }
         });
     }
 
@@ -803,6 +806,12 @@
         var label = document.getElementById('parser-status-label');
         var lockBtn = document.getElementById('lock-parser-btn');
         var unlockBtn = document.getElementById('unlock-parser-btn');
+
+        // Always reset label/buttons first so stale text from unlock/lock actions is cleared
+        icon.textContent = '';
+        label.textContent = '';
+        lockBtn.style.display = 'none';
+        unlockBtn.style.display = 'none';
 
         if (!parserUsed || parserUsed === 'heuristic') {
             panel.style.display = 'none';
