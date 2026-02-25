@@ -14,7 +14,8 @@ from models import (
     get_user_dir, get_user_versions_dir, get_user_settings,
     update_user_settings, verify_user_password, delete_user,
     is_onboarding_complete, mark_onboarding_complete,
-    DEFAULT_SECTION_NAMES, DATA_DIR
+    DEFAULT_SECTION_NAMES, DATA_DIR,
+    generate_mcp_api_key, get_mcp_api_key,
 )
 from pdf_parser import (extract_style_from_pdf,
                         extract_text_local, parse_resume_from_extracted,
@@ -969,6 +970,26 @@ def settings():
 
 
 # --- Delete Profile ---
+
+@app.route('/api/mcp_key', methods=['GET'])
+@login_required
+def get_mcp_key():
+    """Return the current MCP API key for the logged-in user (generate one if missing)."""
+    user_id = get_current_user_id()
+    key = get_mcp_api_key(user_id)
+    if not key:
+        key = generate_mcp_api_key(user_id)
+    return jsonify({"mcp_api_key": key})
+
+
+@app.route('/api/mcp_key/regenerate', methods=['POST'])
+@login_required
+def regenerate_mcp_key():
+    """Invalidate the existing MCP key and issue a new one."""
+    user_id = get_current_user_id()
+    key = generate_mcp_api_key(user_id)
+    return jsonify({"mcp_api_key": key})
+
 
 @app.route('/api/feedback', methods=['POST'])
 @login_required

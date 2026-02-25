@@ -1,6 +1,7 @@
 import os
 import json
 import shutil
+import secrets
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -97,7 +98,7 @@ def init_db():
             )
         ''')
         # Migrations for existing databases
-        for col, defval in [('parser_code', 'NULL'), ('parser_locked', '0')]:
+        for col, defval in [('parser_code', 'NULL'), ('parser_locked', '0'), ('mcp_api_key', 'NULL')]:
             try:
                 cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
             except Exception:
@@ -147,6 +148,10 @@ def init_db():
             conn.execute("SELECT parser_locked FROM users LIMIT 1")
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE users ADD COLUMN parser_locked INTEGER NOT NULL DEFAULT 0")
+        try:
+            conn.execute("SELECT mcp_api_key FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE users ADD COLUMN mcp_api_key TEXT DEFAULT NULL")
         # Reset verbose legacy section name defaults to simple ones
         conn.execute(
             "UPDATE user_settings SET section_names_json = ? WHERE section_names_json = ?",
@@ -340,6 +345,37 @@ def clear_user_parser(user_id):
     )
     conn.commit()
     conn.close()
+
+
+def generate_mcp_api_key(user_id):
+    """Generate (or regenerate) a cryptographically random MCP API key for a user.
+
+    Returns the new key string.
+    """
+    key = secrets.token_urlsafe(32)   # 256 bits of entropy
+    conn = get_db()
+    _execute(conn, f'UPDATE users SET mcp_api_key = {PH} WHERE id = {PH}', (key, user_id))
+    conn.commit()
+    conn.close()
+    return key
+
+
+def get_user_by_mcp_key(api_key):
+    """Look up and return the user row for a given MCP API key, or None."""
+    if not api_key:
+        return None
+    conn = get_db()
+    user = _fetchone(conn, f'SELECT id, email, name FROM users WHERE mcp_api_key = {PH}', (api_key,))
+    conn.close()
+    return user
+
+
+def get_mcp_api_key(user_id):
+    """Return the stored MCP API key for a user, or None if not yet generated."""
+    conn = get_db()
+    row = _fetchone(conn, f'SELECT mcp_api_key FROM users WHERE id = {PH}', (user_id,))
+    conn.close()
+    return row['mcp_api_key'] if row else None
 
 
 def delete_user(user_id):
