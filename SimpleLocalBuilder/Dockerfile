@@ -27,7 +27,4 @@ RUN mkdir -p /app/data
 
 EXPOSE 8000
 
-# Print exact import error before gunicorn starts, so TFY logs show the real cause
-RUN python3 -c "import local_app; print('Import OK')"
-
 CMD ["gunicorn", "local_app:app", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]

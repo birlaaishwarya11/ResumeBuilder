@@ -96,12 +96,10 @@ def init_db():
                 style_json TEXT NOT NULL DEFAULT '{}'
             )
         ''')
-        # Migrations for existing databases
-        for col, defval in [('parser_code', 'NULL'), ('parser_locked', '0')]:
-            try:
-                cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
-            except Exception:
-                pass  # column already exists
+        # Migrations for existing databases — use IF NOT EXISTS so a
+        # pre-existing column never poisons the PostgreSQL transaction
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS parser_code TEXT DEFAULT NULL")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS parser_locked INTEGER DEFAULT 0")
         # Reset verbose legacy section name defaults to simple ones
         cur.execute(
             "UPDATE user_settings SET section_names_json = %s WHERE section_names_json = %s",
