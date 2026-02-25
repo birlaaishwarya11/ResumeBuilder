@@ -226,7 +226,7 @@ def _build_line(chars, line_uris=None):
             # A gap larger than ~2pt typically means a space between words/columns
             if gap > 2:
                 parts.append(' ')
-        parts.append(ch['text'])
+        parts.append(ch.get('text') or '')
 
     text = ''.join(parts).strip()
 
@@ -236,9 +236,9 @@ def _build_line(chars, line_uris=None):
             if uri not in text:
                 text = text + ' ' + uri
 
-    sizes = [ch.get('size', 0) for ch in chars if ch['text'].strip()]
+    sizes = [ch.get('size', 0) for ch in chars if (ch.get('text') or '').strip()]
     avg_size = sum(sizes) / len(sizes) if sizes else 0
-    fonts = [ch.get('fontname', '') for ch in chars if ch['text'].strip()]
+    fonts = [ch.get('fontname', '') for ch in chars if (ch.get('text') or '').strip()]
     is_bold = any('bold' in f.lower() for f in fonts)
     return {
         'text': text,
@@ -937,7 +937,7 @@ def extract_style_from_pdf(pdf_path):
             font_counts = {}
             sizes = []
             for ch in chars:
-                if ch['text'].strip():
+                if (ch.get('text') or '').strip():
                     fname = ch.get('fontname', '')
                     size = ch.get('size', 0)
                     sizes.append(size)
@@ -968,10 +968,10 @@ def extract_style_from_pdf(pdf_path):
             width = page.width   # in points (72 pt = 1 inch)
             height = page.height
             if chars:
-                min_x = min(ch['x0'] for ch in chars if ch['text'].strip())
-                max_x = max(ch['x1'] for ch in chars if ch['text'].strip())
-                min_y = min(ch['top'] for ch in chars if ch['text'].strip())
-                max_y = max(ch['bottom'] for ch in chars if ch['text'].strip())
+                min_x = min(ch['x0'] for ch in chars if (ch.get('text') or '').strip())
+                max_x = max(ch['x1'] for ch in chars if (ch.get('text') or '').strip())
+                min_y = min(ch['top'] for ch in chars if (ch.get('text') or '').strip())
+                max_y = max(ch['bottom'] for ch in chars if (ch.get('text') or '').strip())
 
                 left_margin = min_x / 72.0
                 right_margin = (width - max_x) / 72.0
