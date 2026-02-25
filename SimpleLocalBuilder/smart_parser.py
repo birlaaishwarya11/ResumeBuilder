@@ -137,10 +137,10 @@ def resolve_parser_credentials(user_provider=None, user_api_key=None, user_model
             user_api_key.strip(),
             user_model or None,
         )
-    if PARSER_GEN_API_KEY:
+    if PARSER_GEN_API_KEY and PARSER_GEN_API_KEY.strip():
         return (
             PARSER_GEN_PROVIDER,
-            PARSER_GEN_API_KEY,
+            PARSER_GEN_API_KEY.strip(),   # env vars can carry trailing newlines/tabs
             PARSER_GEN_MODEL,
         )
     return None, None, None

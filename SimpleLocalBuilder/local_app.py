@@ -125,6 +125,36 @@ def _infer_render_type(data):
     return 'bullets'
 
 
+def _has_meaningful_content(parsed: dict) -> bool:
+    """Return True if a parsed resume dict contains real content.
+
+    An LLM-generated parser may execute without error but produce all-empty
+    values (empty name, empty lists). We reject such results and fall back to
+    the heuristic parser rather than showing the user a blank preview.
+    """
+    if not isinstance(parsed, dict) or not parsed:
+        return False
+    # Non-empty name is sufficient
+    if parsed.get('name', '').strip():
+        return True
+    # Contact with any non-empty field counts
+    contact = parsed.get('contact', {})
+    if isinstance(contact, dict) and any(str(v).strip() for v in contact.values() if v):
+        return True
+    # Any major section with at least one entry that has real text
+    for key in ('experience', 'education', 'technical_skills', 'projects', 'extracurricular'):
+        section = parsed.get(key)
+        if isinstance(section, list):
+            for entry in section:
+                if isinstance(entry, dict) and any(str(v).strip() for v in entry.values() if v):
+                    return True
+                if isinstance(entry, str) and entry.strip():
+                    return True
+        if isinstance(section, dict) and section.get('bullets'):
+            return True
+    return False
+
+
 def _build_annotated_text(extracted_data):
     """Convert extracted line data into AI-friendly text with font hints.
 
@@ -445,14 +475,15 @@ def upload_resume():
                     pdf_path, best_parser['code']
                 )
                 sandbox_logs.extend(verify_logs)
-                if verify_result and verify_result.get('parsed'):
-                    parsed = sp.normalize_dates(verify_result['parsed'])
+                _locked_parsed = verify_result.get('parsed') if verify_result else None
+                if _has_meaningful_content(_locked_parsed):
+                    parsed = sp.normalize_dates(_locked_parsed)
                     parser_used = 'smart_locked'
                     cov = verify_result.get('coverage_score', 0)
                     print(f"[SmartParser] Locked parser coverage: {cov}%")
                 else:
-                    # LOCKED parser failed on this PDF — fall through to generation
-                    print("[SmartParser] Locked parser failed, regenerating...")
+                    # LOCKED parser returned empty/sparse result — fall through to generation
+                    print("[SmartParser] Locked parser returned no content, regenerating...")
                     best_parser = None
             if best_parser and parser_state == 'ACTIVE':
                 result, final_code, sp_logs = parser_service.run_parser(
@@ -460,11 +491,11 @@ def upload_resume():
                     provider=sp_provider, api_key=sp_api_key, model=sp_model
                 )
                 sandbox_logs.extend(sp_logs)
-                if result is not None:
+                if _has_meaningful_content(result):
                     parsed = sp.normalize_dates(result)
                     parser_used = 'smart_active'
                 else:
-                    print("[SmartParser] Active parser failed, falling back to heuristic")
+                    print("[SmartParser] Active parser returned no content, falling back to heuristic")
                     parsed = parse_resume_from_extracted(extracted_data)
 
         # 2b. Generate a new smart parser (if credentials available and no usable parser)
@@ -483,13 +514,13 @@ def upload_resume():
                     provider=sp_provider, api_key=sp_api_key, model=sp_model
                 )
                 sandbox_logs.extend(sp_logs)
-                if result is not None:
+                if _has_meaningful_content(result):
                     parsed = sp.normalize_dates(result)
                     parser_used = 'smart_generated'
                     generated_parser_code = final_code
                     print(f"[SmartParser] Parser stored as DRAFT (id={parser_id}) for user {user_id}")
                 else:
-                    print("[SmartParser] Generated parser failed, falling back to heuristic")
+                    print("[SmartParser] Generated parser returned no content, falling back to heuristic")
                     parsed = parse_resume_from_extracted(extracted_data)
             except Exception as e:
                 ai_error_info = _extract_ai_error_info(e)

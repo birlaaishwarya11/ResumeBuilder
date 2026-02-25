@@ -28,6 +28,12 @@ def call_llm(provider: str, api_key: str, system_prompt: str, user_message: str,
         ValueError: on unknown provider or empty Gemini response.
         Provider SDK errors are propagated as-is so callers can inspect status codes.
     """
+    # Strip whitespace/tabs/newlines — API keys appear in HTTP headers or URLs
+    # and non-printable characters cause hard-to-diagnose transport errors.
+    api_key = (api_key or '').strip()
+    if not api_key:
+        raise ValueError('API key is empty after stripping whitespace. Please provide a valid key.')
+
     if provider == 'anthropic':
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
