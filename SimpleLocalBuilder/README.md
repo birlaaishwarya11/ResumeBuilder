@@ -1,139 +1,252 @@
-# Resume Builder — Multi-User Edition
+# Resume Builder
 
-A local Flask web app for building, editing, and tailoring resumes. Supports multiple users with individual workspaces, PDF upload with automatic parsing, customizable section names, and AI-powered JD matching.
+A multi-user Flask web app for uploading, parsing, editing, and tailoring resumes. Features an LLM-generated smart parser, Daytona sandbox execution, live YAML editing with preview, JD matching, and a REST tools API for external testing.
 
-## Features
+---
 
-- **Multi-User Accounts**: Sign up with email/password. Each user gets an isolated workspace with their own resume data, versions, and settings.
-- **PDF Upload & Auto-Parse**: Upload an existing resume PDF and have it automatically parsed into editable YAML using heuristic text extraction (no AI required). The parser detects sections like Education, Experience, Skills, and Projects based on font size, bold text, and common heading patterns.
-- **Live YAML Editor**: Edit your resume content in YAML format with a live HTML preview side-by-side.
-- **Customizable Header**: Edit your name, phone, email, GitHub, LinkedIn, and portfolio links from the Settings panel. The header is stored separately and merged at render time.
-- **Customizable Section Names**: Rename any section title (e.g., change "EDUCATION" to "ACADEMIC BACKGROUND") from the Settings panel.
-- **Version History**: Save multiple resume versions with keywords (e.g., "tech", "finance"). Restore or delete any version.
-- **PDF Download**: Export your resume as a professionally formatted PDF.
-- **Styling Options**: Adjust font, font size, line height, margins, and accent color.
-- **JD Match (AI)**: Paste a Job Description and use Claude, GPT, or Gemini to score and rank your resume versions against the JD.
-- **Grammar Check**: Run an offline grammar check (LanguageTool) or AI-powered proofreading.
+## Architecture Overview
+
+```
+Browser (onboarding.html / editor.html)
+    │
+    │  HTTP/JSON
+    ▼
+local_app.py  ──── Flask routes (auth, onboarding, editor, AI operations)
+    │
+    ├── pdf_parser.py      Heuristic PDF-to-YAML (no AI required)
+    │       └── pdfplumber  Raw char/font extraction + hyperlink injection
+    │
+    ├── smart_parser.py    LLM-generated per-resume parser
+    │       └── sandbox.py  Daytona sandbox execution of generated code
+    │
+    ├── confidence.py      Score parse quality (0–100)
+    ├── models.py          SQLite/PostgreSQL: users, settings, parser store
+    └── tools.py           REST tools API (parse_resume, lock_parser, ...)
+```
+
+### Parse Pipeline (called on every PDF upload)
+
+```
+PDF upload
+    │
+    ▼
+1. EXTRACT  ──── sandbox.py:extract_text_in_sandbox()   [Daytona sandbox]
+                 → pdf_parser.py:extract_text_local()    [local fallback]
+    │
+    ▼
+2. PARSE (priority order)
+    │
+    ├─ 2a. Locked smart parser
+    │       smart_parser.py:run_parser(stored_code)
+    │
+    ├─ 2b. Generate new smart parser  (requires API key)
+    │       smart_parser.py:generate_parser_code()   ← LLM writes parse()
+    │       smart_parser.py:run_parser(generated_code)
+    │           └── sandbox.py:_run_in_daytona()     [Daytona execution]
+    │               → smart_parser.py:_run_local()   [local fallback]
+    │               On error: LLM fixes code, retry up to MAX_RETRIES=2
+    │
+    └─ 2c. Heuristic fallback (always works, no AI)
+            pdf_parser.py:parse_resume_from_extracted()
+    │
+    ▼
+3. POST-PROCESS
+    smart_parser.py:normalize_dates()
+    confidence.py:score_parsed_resume()
+    │
+    ▼
+4. RETURN  JSON: { yaml, header, style, section_names, parser_used, confidence }
+```
+
+---
+
+## File Reference
+
+| File | Purpose | Key functions/routes |
+|------|---------|---------------------|
+| `local_app.py` | Main Flask app — all web routes | `POST /api/upload_resume`, `POST /api/preview`, `POST /api/ai_change`, `POST /api/complete_onboarding`, `call_ai_provider()` |
+| `pdf_parser.py` | Heuristic PDF parser | `extract_text_local()`, `_build_line()`, `parse_resume_from_extracted()`, `classify_section()`, `extract_style_from_pdf()` |
+| `smart_parser.py` | LLM-generated parser + sandbox runner | `generate_parser_code()`, `run_parser()`, `refine_parser_code()`, `normalize_dates()`, `resolve_parser_credentials()` |
+| `sandbox.py` | Daytona sandbox integration | `extract_text_in_sandbox()`, `is_available()`, `EXTRACTION_SCRIPT`, `SEARCH_SCRIPT` |
+| `tools.py` | REST tools API | `POST /tools/parse_resume`, `POST /tools/lock_parser`, `GET /tools/parser_status` |
+| `confidence.py` | Parse quality scoring | `score_parsed_resume()` |
+| `models.py` | DB models, auth, per-user parser storage | `create_user()`, `authenticate_user()`, `save_user_parser()`, `get_user_parser()` |
+| `build_resume.py` | CLI: YAML → PDF | `build_resume()` |
+| `deploy_tfy.py` | Truefoundry deployment script | — |
+
+---
+
+## How Tools Are Called
+
+### `pdf_parser.py` — Heuristic extraction
+
+Called unconditionally on every parse (either directly or as fallback):
+
+```
+local_app.py:upload_resume()
+  → extract_text_local(pdf_path)           # builds {pages:[{lines:[{text,size,bold}]}]}
+      → pdfplumber page.chars              # raw characters with font metadata
+      → page.hyperlinks                    # inject hyperlink URIs into line text
+      → _build_line(chars, uris)           # gap-aware text building per line
+  → parse_resume_from_extracted(data)
+      → _parse_from_lines(lines)
+          → is_section_heading()           # size + bold + keyword detection
+          → classify_section()             # maps heading → YAML key
+          → parse_education_section()
+          → parse_experience_section()
+          → parse_skills_section()
+          → parse_projects_section()
+          → parse_extracurricular_section()
+```
+
+### `smart_parser.py` — LLM-generated parser
+
+Called when an AI API key is provided or a locked parser exists:
+
+```
+local_app.py:upload_resume()
+  → sp.resolve_parser_credentials(provider, api_key, model)
+      # Priority: user-supplied key → PARSER_GEN_API_KEY env → None
+
+  # If locked parser exists:
+  → sp.run_parser(flat_lines, stored_code, provider, api_key, model)
+
+  # If no locked parser but credentials available:
+  → sp.generate_parser_code(flat_lines, provider, api_key, model)
+      → LLM prompt: "Write a parse(lines) function for this resume"
+      → call_ai_provider() in local_app.py
+  → sp.run_parser(generated_code, ...)
+      → _run_in_daytona(lines, code)        # sandbox execution
+          → upload lines.json, parser.py, runner.py to Daytona
+          → exec python3 /tmp/runner.py
+          → parse error → _FIX_PROMPT → LLM fix → retry (up to 2×)
+      → _run_local(lines, code)             # fallback if Daytona unavailable
+  → sp.normalize_dates(result)             # normalise all date strings
+```
+
+### `sandbox.py` — Daytona sandbox
+
+Used in two separate contexts:
+
+1. **PDF extraction** (always attempted first):
+   ```
+   daytona_sandbox.extract_text_in_sandbox(pdf_path)
+     → uploads PDF to Daytona
+     → runs EXTRACTION_SCRIPT (pdfplumber inside sandbox)
+     → returns {pages:[{lines:[{text,size,bold}]}]}
+   ```
+
+2. **Parser execution** (inside `smart_parser.run_parser`):
+   ```
+   _run_in_daytona(lines, code)
+     → uploads lines.json, parser.py, runner.py
+     → runs runner.py → calls parse(lines) → returns JSON
+   ```
+
+### `tools.py` — REST Tools API
+
+External testing API — not used by the main UI. Call with curl or Postman:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/tools/parse_resume` | POST | Upload a PDF, run full pipeline, get YAML + parsed dict |
+| `/tools/lock_parser` | POST | Lock (`action=lock`), unlock, or clear the smart parser |
+| `/tools/parser_status` | GET | Check if user has a stored/locked parser |
+
+**`POST /tools/parse_resume`** parameters:
+- `resume_pdf` — PDF file (multipart)
+- `parser` — `"heuristic"` / `"smart"` / `"auto"` (default: `"auto"`)
+- `provider` — `"anthropic"` / `"openai"` / `"gemini"`
+- `api_key` — LLM API key
+- `model` — model name (optional)
+
+Response includes: `yaml`, `parsed`, `parser_used`, `extraction_source`, `flat_lines`, `logs`
+
+### `call_ai_provider()` — LLM abstraction (in `local_app.py`)
+
+Single function used by all AI features (smart parser generation, AI edit, JD match, grammar check):
+
+```python
+call_ai_provider(provider, api_key, system_prompt, user_message, model=None)
+```
+
+| Provider | SDK | Default model |
+|----------|-----|---------------|
+| `anthropic` | `anthropic` Python SDK | `claude-3-haiku-20240307` |
+| `openai` | `openai` Python SDK | `gpt-3.5-turbo` |
+| `gemini` | `google-genai` SDK (v1 API) | `gemini-2.0-flash` |
+
+> **Note (Gemini):** The Gemini v1 API does not accept `systemInstruction` in `GenerateContentConfig`. The system prompt is folded into the user message content string instead.
+
+---
 
 ## Project Structure
 
 ```
 SimpleLocalBuilder/
-├── local_app.py          # Main Flask application
-├── models.py             # SQLite database, user auth, settings CRUD
-├── pdf_parser.py         # Heuristic PDF-to-YAML parser (no AI)
-├── build_resume.py       # CLI tool to generate PDF from YAML
-├── requirements.txt      # Python dependencies
-├── templates/
-│   ├── editor.html       # Main editor UI
-│   ├── resume.html       # Resume HTML/PDF template (Jinja2)
-│   ├── login.html        # Login page
-│   └── signup.html       # Sign-up page (with optional PDF upload)
-└── data/                 # Created at runtime
-    └── <user_id>/        # Per-user workspace
-        ├── resume.yaml   # Current working resume
-        ├── resume_upload.pdf  # Uploaded PDF
-        ├── preview.pdf   # Temp preview
-        └── versions/     # Saved resume versions
+├── local_app.py          # Main Flask app (auth, onboarding, editor routes)
+├── pdf_parser.py         # Heuristic PDF extraction and section parsing
+├── smart_parser.py       # LLM parser generation, sandbox execution, date normalisation
+├── sandbox.py            # Daytona sandbox client (extraction + parser execution)
+├── tools.py              # REST tools API for external testing
+├── confidence.py         # Parse quality scoring
+├── models.py             # SQLite/PostgreSQL schema, user auth, parser storage
+├── build_resume.py       # CLI: YAML → PDF via WeasyPrint
+├── deploy_tfy.py         # Truefoundry deployment helper
+├── requirements.txt
+├── Dockerfile
+└── templates/
+    ├── onboarding.html   # Step 1: PDF upload + smart parser review
+    ├── editor.html       # Main editor (YAML + live preview + AI tools)
+    ├── resume.html       # Resume render template (Jinja2 → HTML/PDF)
+    ├── login.html
+    └── signup.html
 ```
 
-## Setup
+---
 
-1. **Clone or navigate to the directory:**
-   ```bash
-   cd SimpleLocalBuilder
-   ```
+## Setup (Local)
 
-2. **Create a virtual environment (recommended):**
+1. **Install dependencies:**
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
+   python3 -m venv venv && source venv/bin/activate
    pip install -r requirements.txt
    ```
 
-   > **Note on WeasyPrint:** WeasyPrint requires system libraries (`cairo`, `pango`, `gdk-pixbuf`). On macOS: `brew install cairo pango gdk-pixbuf libffi`. On Ubuntu: `sudo apt install libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev`.
+   WeasyPrint also requires system libraries:
+   - macOS: `brew install cairo pango gdk-pixbuf libffi`
+   - Ubuntu: `sudo apt install libcairo2-dev libpango1.0-dev libgdk-pixbuf2.0-dev`
 
-4. **Run the app:**
+2. **Run:**
    ```bash
    python3 local_app.py
+   # or
+   flask run --port 5001
    ```
 
-5. **Open your browser:**
-   Go to [http://127.0.0.1:5001](http://127.0.0.1:5001)
+3. Open [http://127.0.0.1:5001](http://127.0.0.1:5001)
 
-## Usage
-
-### First Time
-1. Go to `/signup` and create an account.
-2. Optionally upload your existing resume PDF during signup — it will be parsed and pre-fill the editor.
-3. If you skip the upload, you'll see an upload prompt on the editor page, or you can start writing YAML from scratch.
-
-### Editor Workflow
-- **Left pane**: YAML editor for resume content (everything except header/contact info).
-- **Right pane**: Live HTML preview of your resume.
-- **Toolbar**: Save versions, view history, upload new PDFs, download PDF, and access JD Match.
-- **Header**: Displayed above the editor as read-only. Edit it via the **Settings** panel (top-right).
-
-### Settings Panel
-Click **Settings** in the top bar to:
-- Edit your **name, phone, email, location, GitHub, LinkedIn, portfolio** — these appear in the resume header.
-- Rename **section titles** (Education, Technical Skills, Experience, Projects, Extracurricular) to anything you want.
-
-### Saving & Versions
-- Enter a keyword (e.g., "devops") in the toolbar and click **Save Version**.
-- Click **History** to browse, restore, or delete saved versions.
-
-### JD Match (requires AI API key)
-- Click **JD Match**, select a provider (Claude/GPT/Gemini), enter your API key, paste the Job Description.
-- **Check Current Resume Score**: Scores your current editor content against the JD.
-- **Analyze Saved Versions**: Ranks all saved versions by relevance to the JD.
-
-### Grammar Check
-- Click the pencil icon above the editor.
-- Choose **Offline** (LanguageTool — requires Java) or **AI** mode.
-- Review suggestions and accept/reject each one.
-
-### PDF Download
-- Click **Download PDF** to get a formatted PDF.
-- Click the eye icon for a **Live View** modal with the rendered PDF.
-
-## PDF Parser Details
-
-The heuristic PDF parser (`pdf_parser.py`) extracts text from PDFs using `pdfplumber` and structures it without any AI:
-
-1. **Name detection**: Identifies the largest-font text as the person's name.
-2. **Contact extraction**: Finds email, phone, URLs (GitHub, LinkedIn, portfolio), and location using regex patterns.
-3. **Section detection**: Identifies section headings via ALL CAPS text, bold+large font, or matching against common heading keywords.
-4. **Section-specific parsing**:
-   - Education: Detects institutions, degrees, GPA, dates.
-   - Experience: Detects company/role lines with date ranges, then extracts bullet points.
-   - Skills: Parses "Category: skill1, skill2" patterns.
-   - Projects: Similar to experience with name/event/award fields.
-   - Extracurricular: Collected as flat bullet points.
-
-The parser is designed as a best-effort starting point. After upload, users should review and adjust the YAML in the editor.
-
-### Command Line (Optional)
-If you prefer not to use the web interface, you can still build from the terminal:
-1. Edit a `resume.yaml` file.
-2. Run:
-   ```bash
-   python3 build_resume.py
-   ```
+---
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SECRET_KEY` | `dev-secret-change-in-production` | Flask session secret key. Set to a random string in production. |
+| `SECRET_KEY` | `dev-secret-change-in-production` | Flask session key |
+| `DATABASE_URL` | SQLite `resume_builder.db` | PostgreSQL URL for production |
+| `PARSER_GEN_API_KEY` | — | Server-side API key for smart parser generation (optional — users can supply their own) |
+| `PARSER_GEN_PROVIDER` | `anthropic` | Provider for server-side parser generation |
+| `PARSER_GEN_MODEL` | `claude-sonnet-4-6` | Model for server-side parser generation |
+| `DAYTONA_API_KEY` | — | Daytona sandbox API key |
+| `DAYTONA_API_URL` | — | Daytona server URL |
+| `DAYTONA_TARGET` | — | Daytona workspace target |
 
-## Backup
+---
 
-A backup of the original single-user code is preserved at `SimpleLocalBuilder_BACKUP_<timestamp>/` in the parent directory.
+## Deployment (Truefoundry)
 
+Use `deploy_tfy.py` to deploy to Truefoundry. Set the env vars above in the TFY service config. The `Dockerfile` is already configured for the production environment (Debian Bookworm, PostgreSQL support).
 
-
+```bash
+python3 deploy_tfy.py
+```
