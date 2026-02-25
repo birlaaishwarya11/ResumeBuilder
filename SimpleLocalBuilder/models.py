@@ -136,11 +136,15 @@ def init_db():
             )
         ''')
         # Migrations for existing databases (legacy columns on users, kept for backward compat)
+        # Use savepoints so a "column already exists" error doesn't abort the transaction.
         for col, defval in [('parser_code', 'NULL'), ('parser_locked', '0'), ('mcp_api_key', 'NULL')]:
             try:
+                cur.execute("SAVEPOINT add_col")
                 cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT {defval}")
+                cur.execute("RELEASE SAVEPOINT add_col")
             except Exception:
-                pass  # column already exists
+                cur.execute("ROLLBACK TO SAVEPOINT add_col")
+                cur.execute("RELEASE SAVEPOINT add_col")
         # Reset verbose legacy section name defaults to simple ones
         cur.execute(
             "UPDATE user_settings SET section_names_json = %s WHERE section_names_json = %s",
