@@ -150,32 +150,40 @@ def _infer_render_type(data):
 
 
 def _has_meaningful_content(parsed: dict) -> bool:
-    """Return True if a parsed resume dict contains real content.
+    """Return True if a parsed resume dict contains real editable content.
 
-    An LLM-generated parser may execute without error but produce all-empty
-    values (empty name, empty lists). We reject such results and fall back to
-    the heuristic parser rather than showing the user a blank preview.
+    'name' and 'contact' are always stripped into the header before the YAML
+    editor is shown, so a parser that only returns those fields produces a
+    blank YAML and empty preview.  We require at least one *non-header* field
+    to have real text before accepting an AI parse result.
     """
     if not isinstance(parsed, dict) or not parsed:
         return False
-    # Non-empty name is sufficient
-    if parsed.get('name', '').strip():
-        return True
-    # Contact with any non-empty field counts
-    contact = parsed.get('contact', {})
-    if isinstance(contact, dict) and any(str(v).strip() for v in contact.values() if v):
-        return True
-    # Any major section with at least one entry that has real text
-    for key in ('experience', 'education', 'technical_skills', 'projects', 'extracurricular'):
-        section = parsed.get(key)
-        if isinstance(section, list):
-            for entry in section:
-                if isinstance(entry, dict) and any(str(v).strip() for v in entry.values() if v):
-                    return True
-                if isinstance(entry, str) and entry.strip():
-                    return True
-        if isinstance(section, dict) and section.get('bullets'):
+
+    # Keys that are always moved to the header or are internal metadata —
+    # they don't appear in the editable YAML, so they don't count.
+    _HEADER_KEYS = {'name', 'contact', '_section_headings', '_date_parsed'}
+
+    def _entry_has_text(entry):
+        if isinstance(entry, dict):
+            return any(str(v).strip() for v in entry.values() if v)
+        if isinstance(entry, str):
+            return bool(entry.strip())
+        return False
+
+    for key, val in parsed.items():
+        if key in _HEADER_KEYS:
+            continue
+        if isinstance(val, list) and any(_entry_has_text(e) for e in val):
             return True
+        if isinstance(val, dict):
+            if val.get('bullets') and any(str(b).strip() for b in val['bullets'] if b):
+                return True
+            if any(str(v).strip() for v in val.values() if v):
+                return True
+        if isinstance(val, str) and val.strip():
+            return True
+
     return False
 
 
@@ -538,13 +546,16 @@ def upload_resume():
                     provider=sp_provider, api_key=sp_api_key, model=sp_model
                 )
                 sandbox_logs.extend(sp_logs)
+                _HEADER_KEYS = {'name', 'contact', '_section_headings', '_date_parsed'}
+                _result_keys = [k for k in (result or {}) if k not in _HEADER_KEYS and (result or {}).get(k)]
+                app.logger.info(f"[SmartParser] Parser result keys with content: {_result_keys}")
                 if _has_meaningful_content(result):
                     parsed = sp.normalize_dates(result)
                     parser_used = 'smart_generated'
                     generated_parser_code = final_code
-                    app.logger.info(f"[SmartParser] Parser stored as DRAFT (id={parser_id}) for user {user_id}")
+                    app.logger.info(f"[SmartParser] Parser accepted (DRAFT id={parser_id})")
                 else:
-                    app.logger.warning("[SmartParser] Generated parser returned no content, falling back to heuristic")
+                    app.logger.warning(f"[SmartParser] Parser returned only header fields {list((result or {}).keys())}, falling back to heuristic")
                     parsed = parse_resume_from_extracted(extracted_data)
             except Exception as e:
                 ai_error_info = _extract_ai_error_info(e)
