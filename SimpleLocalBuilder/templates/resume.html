@@ -143,7 +143,7 @@
                 {%- set score = edu.gpa or edu.score or edu.cgpa or edu.grade -%}
                 {%- if score %}, {{ score }}{% endif %}
             </div>
-            <div class="right date-italic">{{ edu.date or edu.dates or '' }}</div>
+            <div class="right date-italic">{{ edu.date or edu.dates or edu.end_date or edu.graduation_date or edu.year or edu.period or '' }}</div>
         </div>
         {% if edu.honors %}
         <div style="font-style: italic;">{{ edu.honors }}</div>

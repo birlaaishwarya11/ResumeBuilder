@@ -7,6 +7,7 @@ import sys
 import json
 import glob
 import logging
+import re as _re
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
@@ -185,6 +186,111 @@ def _has_meaningful_content(parsed: dict) -> bool:
             return True
 
     return False
+
+
+# ---------------------------------------------------------------------------
+# Post-processing: clean up common AI parser artifacts
+# ---------------------------------------------------------------------------
+
+_CONTACT_PAT = _re.compile(
+    r'@|mailto:|tel:|tel\.|linkedin\.com|github\.com|https?://|www\.'
+    r'|\+\d[\d\s\-()]{6,}',
+    _re.IGNORECASE,
+)
+_EDU_KEYWORDS = _re.compile(
+    r'university|college|school|institute|academy|polytechnic|iit|iim|'
+    r'nit|srm|vit|bits|mit|stanford|harvard|purdue|nyu|ucla|usc|oxford|cambridge',
+    _re.IGNORECASE,
+)
+_BULLET_PREFIX = _re.compile(r'^[\u2022\u2023\u25e6\-\*]\s*')
+
+
+def _clean_flat_list(items: list) -> list:
+    """Strip leading bullet characters and re-join orphaned continuation lines.
+
+    Some parsers emit list items like:
+        ["• Led a team of 100+ as CRM for", "Techno-Management fest AARUUSH."]
+    where the second item is a continuation, not a new bullet.  We detect
+    bullet-prefix lists (≥40 % of items start with a bullet char) and merge
+    items that lack the prefix back onto the previous item.
+    """
+    if not items or not all(isinstance(i, str) for i in items):
+        return items
+
+    stripped = [i.strip() for i in items]
+    bullet_count = sum(1 for s in stripped if _BULLET_PREFIX.match(s))
+    is_bullet_list = bullet_count >= max(1, len(stripped) * 0.4)
+
+    cleaned: list[str] = []
+    for s in stripped:
+        if not s:
+            continue
+        if is_bullet_list:
+            if _BULLET_PREFIX.match(s):
+                cleaned.append(_BULLET_PREFIX.sub('', s).strip())
+            else:
+                # Continuation — glue onto previous item
+                if cleaned:
+                    cleaned[-1] = cleaned[-1].rstrip() + ' ' + s
+                else:
+                    cleaned.append(s)
+        else:
+            cleaned.append(s)
+    return [s for s in cleaned if s]
+
+
+def _clean_parsed_resume(parsed: dict) -> dict:
+    """Remove common AI parser artifacts from a parsed resume dict.
+
+    1. Drop education entries that are really the contact/header block
+       (empty degree + description contains email / URL / phone).
+    2. Strip leading bullet chars and merge continuation lines in every
+       flat list-of-strings section (including bullets / description
+       sub-lists inside list-of-dict sections).
+    """
+    if not isinstance(parsed, dict):
+        return parsed
+
+    result = dict(parsed)
+
+    # 1. Clean education: remove spurious contact-info entries
+    edu = result.get('education')
+    if isinstance(edu, list):
+        kept = []
+        for entry in edu:
+            if not isinstance(entry, dict):
+                kept.append(entry)
+                continue
+            degree = (entry.get('degree') or '').strip()
+            institution = (entry.get('institution') or '').strip()
+            desc = entry.get('description') or []
+            desc_text = ' '.join(str(d) for d in desc) if isinstance(desc, list) else str(desc)
+
+            # Looks like contact info masquerading as an education entry?
+            if _CONTACT_PAT.search(desc_text) or _CONTACT_PAT.search(institution):
+                if not _EDU_KEYWORDS.search(institution):
+                    continue   # skip it
+            # Empty degree with no recognisable institution is also suspicious
+            if not degree and not _EDU_KEYWORDS.search(institution):
+                continue
+            kept.append(entry)
+        result['education'] = kept
+
+    # 2. Strip bullet prefixes & merge continuations in all list sections
+    for key, val in result.items():
+        if not isinstance(val, list) or not val:
+            continue
+        if isinstance(val[0], str):
+            result[key] = _clean_flat_list(val)
+        elif isinstance(val[0], dict):
+            for item in val:
+                if not isinstance(item, dict):
+                    continue
+                for subkey in ('bullets', 'description'):
+                    if isinstance(item.get(subkey), list):
+                        item[subkey] = _clean_flat_list(item[subkey])
+
+    return result
 
 
 def _build_annotated_text(extracted_data):
@@ -569,6 +675,9 @@ def upload_resume():
         if not parsed:
             return jsonify({"status": "error",
                             "message": "Could not parse the PDF. Try providing an AI API key for better results."}), 500
+
+        # Clean up common AI parser artifacts (bullet prefixes, contact-as-education, etc.)
+        parsed = _clean_parsed_resume(parsed)
 
         # Step 3: Build response
         confidence = score_parsed_resume(parsed)
