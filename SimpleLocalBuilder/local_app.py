@@ -38,7 +38,7 @@ try:
     init_db()
     print(">>> DB init OK", flush=True)
 except Exception:
-    print(">>> FATAL: init_db() failed — see below", flush=True)
+    print(">>> FATAL: init_db() failed:", flush=True)
     traceback.print_exc()
     raise
 
