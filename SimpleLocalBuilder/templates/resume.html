@@ -138,16 +138,18 @@
             <div class="right">{{ edu.location }}</div>
         </div>
         <div class="row">
-            <div class="left"><strong>{{ edu.degree }}</strong>{% if edu.gpa %}, GPA: {{ edu.gpa }}{% endif %}</div>
-            <div class="right date-italic">{{ edu.date }}</div>
+            <div class="left">
+                <strong>{{ edu.degree }}</strong>
+                {%- set score = edu.gpa or edu.score or edu.cgpa or edu.grade -%}
+                {%- if score %}, {{ score }}{% endif %}
+            </div>
+            <div class="right date-italic">{{ edu.date or edu.dates or '' }}</div>
         </div>
         {% if edu.honors %}
         <div style="font-style: italic;">{{ edu.honors }}</div>
         {% endif %}
         {% if edu.coursework %}
-        <div class="coursework">
-            Relevant Coursework: {{ edu.coursework }}
-        </div>
+        <div class="coursework">Relevant Coursework: {{ edu.coursework }}</div>
         {% endif %}
     </div>
     {% if not loop.last %}<div style="margin-bottom: 5px;"></div>{% endif %}
@@ -170,14 +172,21 @@
     {% for exp in resume.experience %}
     <div class="experience-item">
         <div class="row">
-            <div class="left"><strong>{{ exp.company }}</strong>{% if exp.role %}, <strong>{{ exp.role }}</strong>{% endif %}{% if exp.location %}, {{ exp.location }}{% endif %}</div>
-            <div class="right date-italic">{{ exp.date }}</div>
+            <div class="left">
+                <strong>{{ exp.company or exp.organization or exp.employer or exp.title or '' }}</strong>
+                {%- if exp.role or exp.position %}, <strong>{{ exp.role or exp.position }}</strong>{% endif %}
+                {%- if exp.location %}, {{ exp.location }}{% endif %}
+            </div>
+            <div class="right date-italic">{{ exp.date or exp.dates or '' }}</div>
         </div>
-        {% if exp.bullets %}
+        {% set exp_bullets = exp.bullets or exp.description %}
+        {% if exp_bullets %}
         <ul>
-            {% for bullet in exp.bullets %}
-            <li>{{ bullet }}</li>
-            {% endfor %}
+            {% if exp_bullets is iterable and exp_bullets is not string %}
+                {% for bullet in exp_bullets %}<li>{{ bullet }}</li>{% endfor %}
+            {% else %}
+                <li>{{ exp_bullets }}</li>
+            {% endif %}
         </ul>
         {% endif %}
     </div>
@@ -202,13 +211,16 @@
                 {% if proj.event %} | <strong>{{ proj.event }}</strong>{% endif %}
                 {% if proj.award %} | <strong>{{ proj.award }}</strong>{% endif %}
             </div>
-            <div class="right date-italic">{{ proj.date }}</div>
+            <div class="right date-italic">{{ proj.date or proj.dates or '' }}</div>
         </div>
-        {% if proj.bullets %}
+        {% set proj_bullets = proj.bullets or proj.description %}
+        {% if proj_bullets %}
         <ul>
-            {% for bullet in proj.bullets %}
-            <li>{{ bullet }}</li>
-            {% endfor %}
+            {% if proj_bullets is iterable and proj_bullets is not string %}
+                {% for bullet in proj_bullets %}<li>{{ bullet }}</li>{% endfor %}
+            {% else %}
+                <li>{{ proj_bullets }}</li>
+            {% endif %}
         </ul>
         {% endif %}
     </div>
@@ -218,6 +230,23 @@
     <!-- EXTRACURRICULAR -->
     {% if resume.extracurricular %}
     <div class="section-title">{{ section_names.extracurricular | default('EXTRACURRICULAR ACTIVITIES') }}</div>
+    {% if resume.extracurricular is iterable and resume.extracurricular is not string and resume.extracurricular is not mapping %}
+    {# List format: [{title, bullets}, ...] or flat list of strings #}
+    {% for group in resume.extracurricular %}
+        {% if group is mapping %}
+            {% if group.title or group.name %}
+            <div style="font-weight:bold; margin-top:3px;">{{ group.title or group.name }}</div>
+            {% endif %}
+            {% set grp_bullets = group.bullets or group.description %}
+            {% if grp_bullets %}
+            <ul>{% for b in grp_bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+            {% endif %}
+        {% else %}
+        <ul><li>{{ group }}</li></ul>
+        {% endif %}
+    {% endfor %}
+    {% else %}
+    {# Dict format: {bullets: [...], research_papers: [...]} #}
     <ul>
         {% if resume.extracurricular.bullets %}
         {% for bullet in resume.extracurricular.bullets %}
@@ -234,6 +263,7 @@
         </li>
         {% endif %}
     </ul>
+    {% endif %}
     {% endif %}
 
     <!-- CUSTOM SECTIONS -->
