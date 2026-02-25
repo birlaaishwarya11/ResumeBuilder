@@ -3,8 +3,10 @@ from functools import wraps
 import traceback
 import yaml
 import os
+import sys
 import json
 import glob
+import logging
 from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
@@ -31,6 +33,23 @@ app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-in-production')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+
+# --- Logging setup ---
+# gunicorn captures stderr; line-buffered stdout ensures prints flush immediately.
+# Flask's logger is set to INFO so app.logger.info() calls are visible.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(line_buffering=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    stream=sys.stderr,
+    force=True,
+)
+app.logger.setLevel(logging.INFO)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
@@ -467,7 +486,7 @@ def upload_resume():
         best_parser = parser_service.get_best_parser(user_id)
         if best_parser:
             parser_state = best_parser['state']
-            print(f"[SmartParser] Using {parser_state} parser (id={best_parser['id']}) for user {user_id}")
+            app.logger.info(f"[SmartParser] Using {parser_state} parser (id={best_parser['id']}) for user {user_id}")
             if parser_state == 'LOCKED':
                 # Privacy-preserving path: extract + run + verify all inside one sandbox.
                 # Raw lines never leave the Daytona container.
@@ -480,10 +499,10 @@ def upload_resume():
                     parsed = sp.normalize_dates(_locked_parsed)
                     parser_used = 'smart_locked'
                     cov = verify_result.get('coverage_score', 0)
-                    print(f"[SmartParser] Locked parser coverage: {cov}%")
+                    app.logger.info(f"[SmartParser] Locked parser coverage: {cov}%")
                 else:
                     # LOCKED parser returned empty/sparse result — fall through to generation
-                    print("[SmartParser] Locked parser returned no content, regenerating...")
+                    app.logger.warning("[SmartParser] Locked parser returned no content, regenerating...")
                     best_parser = None
             if best_parser and parser_state == 'ACTIVE':
                 result, final_code, sp_logs = parser_service.run_parser(
@@ -495,12 +514,12 @@ def upload_resume():
                     parsed = sp.normalize_dates(result)
                     parser_used = 'smart_active'
                 else:
-                    print("[SmartParser] Active parser returned no content, falling back to heuristic")
+                    app.logger.warning("[SmartParser] Active parser returned no content, falling back to heuristic")
                     parsed = parse_resume_from_extracted(extracted_data)
 
         # 2b. Generate a new smart parser (if credentials available and no usable parser)
         if not best_parser and sp_provider and sp_api_key:
-            print(f"[SmartParser] Generating new parser for user {user_id}")
+            app.logger.info(f"[SmartParser] Generating new parser for user {user_id}")
             try:
                 with open(pdf_path, 'rb') as _pf:
                     _pdf_bytes = _pf.read()
@@ -518,13 +537,13 @@ def upload_resume():
                     parsed = sp.normalize_dates(result)
                     parser_used = 'smart_generated'
                     generated_parser_code = final_code
-                    print(f"[SmartParser] Parser stored as DRAFT (id={parser_id}) for user {user_id}")
+                    app.logger.info(f"[SmartParser] Parser stored as DRAFT (id={parser_id}) for user {user_id}")
                 else:
-                    print("[SmartParser] Generated parser returned no content, falling back to heuristic")
+                    app.logger.warning("[SmartParser] Generated parser returned no content, falling back to heuristic")
                     parsed = parse_resume_from_extracted(extracted_data)
             except Exception as e:
                 ai_error_info = _extract_ai_error_info(e)
-                print(f"[SmartParser] Generation failed ({ai_error_info['message']}), falling back to heuristic")
+                app.logger.error(f"[SmartParser] Generation failed: {ai_error_info['message']}", exc_info=True)
                 parsed = parse_resume_from_extracted(extracted_data)
 
         # 2c. Heuristic fallback (no parser, no credentials, or all above failed)
@@ -563,11 +582,11 @@ def upload_resume():
         editable_data = strip_header(parsed, header)
         yaml_content = yaml.dump(editable_data, sort_keys=False, allow_unicode=True)
 
-        # Print sandbox logs to backend console
+        # Emit sandbox logs through the logging system
         if sandbox_logs:
-            print(f"[Sandbox Logs] {extraction_source} extraction:")
+            app.logger.info(f"[Sandbox] {extraction_source} extraction logs:")
             for log_line in sandbox_logs:
-                print(f"  {log_line}")
+                app.logger.info(f"  {log_line}")
 
         response_payload = {
             "yaml": yaml_content,

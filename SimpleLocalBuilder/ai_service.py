@@ -28,9 +28,14 @@ def call_llm(provider: str, api_key: str, system_prompt: str, user_message: str,
         ValueError: on unknown provider or empty Gemini response.
         Provider SDK errors are propagated as-is so callers can inspect status codes.
     """
-    # Strip whitespace/tabs/newlines — API keys appear in HTTP headers or URLs
-    # and non-printable characters cause hard-to-diagnose transport errors.
+    # Strip whitespace/tabs/newlines from every string that ends up in a URL or
+    # HTTP header.  The Gemini SDK embeds the api_key AND the model name directly
+    # in the request URL, so a single \t or \n in either field triggers:
+    #   "Invalid non-printable ASCII character in URL, '\t' at position N"
+    provider = (provider or '').strip().lower()
     api_key = (api_key or '').strip()
+    model = (model or '').strip() or None   # normalise empty string → None
+
     if not api_key:
         raise ValueError('API key is empty after stripping whitespace. Please provide a valid key.')
 
