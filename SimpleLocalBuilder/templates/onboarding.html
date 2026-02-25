@@ -260,17 +260,6 @@
             </div>
         </div>
 
-        <!-- Locked parser banner (shown when user has a confirmed parser) -->
-        <div id="locked-parser-banner" style="display:none; margin-top:16px; padding:12px 16px; background:#e8f5e9; border:1px solid #4caf50; border-radius:8px;">
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <span style="font-size:1.1em; flex-shrink:0;">&#128274;</span>
-                <div style="flex:1; font-size:0.87em; color:#2e7d32;">
-                    <strong>Locked parser active.</strong> Your confirmed custom parser will be used for this upload.
-                </div>
-                <button class="btn btn-secondary" style="font-size:0.8em; padding:5px 12px;" onclick="clearLockedParser()">Clear &amp; Regenerate</button>
-            </div>
-        </div>
-
     </div>
 </div>
 
@@ -583,13 +572,8 @@
 
     // Show review step — verifies that the preview renders correctly before display
     function showReviewStep() {
-        // Initialise editor (hidden) so we can populate it before the step is shown
+        // Initialise Ace editor lazily (only on first call)
         if (!yamlEditor) {
-            // Reveal review-step off-screen so Ace can measure, then hide again
-            var reviewEl = document.getElementById('review-step');
-            reviewEl.style.display = 'flex';
-            reviewEl.style.visibility = 'hidden';
-
             yamlEditor = ace.edit('yaml-editor');
             yamlEditor.setTheme('ace/theme/chrome');
             yamlEditor.session.setMode('ace/mode/yaml');
@@ -602,16 +586,11 @@
                 clearTimeout(previewTimeout);
                 previewTimeout = setTimeout(updatePreview, 800);
             });
-
-            reviewEl.style.display = 'none';
-            reviewEl.style.visibility = '';
         }
-
-        yamlEditor.setValue(parsedData.yaml, -1);
 
         renderConfidence(parsedData.confidence);
 
-        // Show smart parser panel state (set before the step is visible)
+        // Show smart parser panel state
         updateSmartParserPanel(
             parsedData.parser_used,
             null,
@@ -622,6 +601,22 @@
         var apiKey = document.getElementById('ai-api-key').value.trim();
         if (apiKey) {
             document.getElementById('ai-change-bar').style.display = 'block';
+        }
+
+        // Helper: reveal the step and populate the editor (must be visible for Ace to render)
+        function revealStep(html) {
+            document.getElementById('upload-step').style.display = 'none';
+            document.getElementById('review-step').style.display = 'flex';
+            // Set YAML now that the editor container is visible, then resize
+            yamlEditor.setValue(parsedData.yaml, -1);
+            yamlEditor.resize();
+            if (html) {
+                var iframe = document.getElementById('preview-frame');
+                var doc = iframe.contentDocument || iframe.contentWindow.document;
+                doc.open();
+                doc.write(html);
+                doc.close();
+            }
         }
 
         // --- Pre-display verification: render preview first, then show the step ---
@@ -641,32 +636,18 @@
             return r.text();
         })
         .then(function(html) {
-            // Write preview into iframe before revealing the step
-            var iframe = document.getElementById('preview-frame');
-            var doc = iframe.contentDocument || iframe.contentWindow.document;
-            doc.open();
-            doc.write(html);
-            doc.close();
-
             // Content consistency check: name in YAML should appear in rendered HTML
             var name = (parsedData.header && parsedData.header.name) ? parsedData.header.name.trim() : '';
             if (name && html.indexOf(name) === -1) {
                 showToast('Preview may not reflect all parsed content. You can still edit the YAML.', 'warning');
             }
-
-            // All good — reveal the review step
-            document.getElementById('upload-step').style.display = 'none';
-            document.getElementById('review-step').style.display = 'flex';
-            // Ace Editor needs a resize signal after its container becomes visible
-            if (yamlEditor) { setTimeout(function() { yamlEditor.resize(); }, 50); }
+            revealStep(html);
         })
         .catch(function(err) {
             // Preview failed but we still show the step so the user can edit
             console.error('Preview verification error:', err);
             showToast('Preview could not be rendered. Check the YAML for errors.', 'error');
-            document.getElementById('upload-step').style.display = 'none';
-            document.getElementById('review-step').style.display = 'flex';
-            if (yamlEditor) { setTimeout(function() { yamlEditor.resize(); }, 50); }
+            revealStep(null);
         });
     }
 
@@ -788,18 +769,6 @@
     // Smart parser helpers
     // -----------------------------------------------------------------------
 
-    // Check on page load whether user has a locked parser
-    (function checkParserStatus() {
-        fetch('/tools/parser_status')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.has_parser && data.locked) {
-                    document.getElementById('locked-parser-banner').style.display = 'block';
-                }
-            })
-            .catch(function() {});
-    })();
-
     function updateSmartParserPanel(parserUsed, _code, locked) {
         var panel = document.getElementById('smart-parser-panel');
         var icon = document.getElementById('parser-status-icon');
@@ -853,7 +822,6 @@
                 document.getElementById('unlock-parser-btn').style.display = 'inline-block';
                 document.getElementById('parser-status-icon').textContent = '\uD83D\uDD12';
                 document.getElementById('parser-status-label').textContent = 'Parser locked. It will be reused for future uploads.';
-                document.getElementById('locked-parser-banner').style.display = 'block';
                 showToast('Parser locked! It will be reused for future uploads.', 'success');
             } else {
                 btn.textContent = 'Confirm & Lock Parser';
@@ -881,7 +849,6 @@
                 document.getElementById('lock-parser-btn').textContent = 'Confirm & Lock Parser';
                 document.getElementById('parser-status-icon').textContent = '\u2728';
                 document.getElementById('parser-status-label').textContent = 'Parser unlocked. Lock it again after reviewing.';
-                document.getElementById('locked-parser-banner').style.display = 'none';
                 showToast('Parser unlocked.', 'info');
             } else {
                 showToast('Error: ' + data.message, 'error');
@@ -900,7 +867,6 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.status === 'success') {
-                document.getElementById('locked-parser-banner').style.display = 'none';
                 showToast('Parser cleared. A new one will be generated on next upload.', 'info');
             } else {
                 showToast('Error: ' + data.message, 'error');
@@ -920,7 +886,6 @@
         .then(function(data) {
             if (data.status === 'success') {
                 document.getElementById('smart-parser-panel').style.display = 'none';
-                document.getElementById('locked-parser-banner').style.display = 'none';
                 showToast('Parser cleared.', 'info');
             }
         })
