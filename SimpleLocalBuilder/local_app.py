@@ -276,19 +276,25 @@ def _clean_parsed_resume(parsed: dict) -> dict:
             kept.append(entry)
         result['education'] = kept
 
-    # 2. Strip bullet prefixes & merge continuations in all list sections
+    # 2. Strip bullet prefixes & merge continuations everywhere
     for key, val in result.items():
-        if not isinstance(val, list) or not val:
-            continue
-        if isinstance(val[0], str):
-            result[key] = _clean_flat_list(val)
-        elif isinstance(val[0], dict):
-            for item in val:
-                if not isinstance(item, dict):
-                    continue
-                for subkey in ('bullets', 'description'):
-                    if isinstance(item.get(subkey), list):
-                        item[subkey] = _clean_flat_list(item[subkey])
+        if isinstance(val, list) and val:
+            if isinstance(val[0], str):
+                # Flat list of strings
+                result[key] = _clean_flat_list(val)
+            elif isinstance(val[0], dict):
+                # List of dicts — clean their bullets/description sub-lists
+                for item in val:
+                    if not isinstance(item, dict):
+                        continue
+                    for subkey in ('bullets', 'description'):
+                        if isinstance(item.get(subkey), list):
+                            item[subkey] = _clean_flat_list(item[subkey])
+        elif isinstance(val, dict):
+            # Top-level dict (e.g. {bullets: [...], description: [...]})
+            for subkey in ('bullets', 'description'):
+                if isinstance(val.get(subkey), list):
+                    val[subkey] = _clean_flat_list(val[subkey])
 
     return result
 
