@@ -1051,10 +1051,16 @@ def save():
     data = request.json
     resume_yaml = data.get('resume', '')
     keyword = data.get('keyword', 'default')
+    # tags: optional list of strings to attach to this version for JD matching
+    # e.g. ["python", "backend", "aws"]
+    tags = data.get('tags') or None
+    if isinstance(tags, list):
+        tags = [str(t).strip() for t in tags if str(t).strip()]
+    if not tags:
+        tags = None
 
     try:
         user_id = get_current_user_id()
-        user_dir = get_user_dir(user_id)
         versions_dir = get_user_versions_dir(user_id)
         header = get_current_user_header()
         user = get_user_by_id(user_id)
@@ -1062,25 +1068,26 @@ def save():
         full_data = merge_header(resume_yaml, header)
         full_yaml = yaml.dump(full_data, sort_keys=False, allow_unicode=True)
 
-        # Save main file
-        with open(os.path.join(user_dir, 'resume.yaml'), 'w') as f:
-            f.write(full_yaml)
+        # Save main file + DB version row (with optional tags)
+        from resume_service import save_current_resume as _save_version
+        version_id = _save_version(user_id, full_yaml, source='manual_edit', label=keyword, tags=tags)
 
-        # Save version
+        # Also write legacy file-based version for backward compat
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_keyword = "".join([c for c in keyword if c.isalnum() or c in ('-', '_')]).strip()
         if not safe_keyword:
             safe_keyword = "default"
-
-        # Use user's name in filename
         safe_name = "".join([c for c in user['name'] if c.isalnum() or c in (' ', '-', '_')]).strip().replace(' ', '_')
         version_filename = f"{safe_name}_{safe_keyword}_{timestamp}.yaml"
-
         os.makedirs(versions_dir, exist_ok=True)
         with open(os.path.join(versions_dir, version_filename), 'w') as f:
             f.write(full_yaml)
 
-        return jsonify({"status": "success", "message": f"Saved as {version_filename}"})
+        return jsonify({
+            "status": "success",
+            "message": f"Saved as {version_filename}",
+            "version_id": version_id,
+        })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -1338,6 +1345,27 @@ def restore_version():
         return jsonify({"status": "error", "message": str(e)}), 400
 
 
+@app.route('/api/versions/<int:version_id>/tags', methods=['PATCH'])
+@login_required
+def update_version_tags(version_id):
+    """Set or replace tags on a saved version (used for JD best-match selection).
+
+    Body: {"tags": ["python", "backend", "aws"]}
+    """
+    from resume_service import tag_version as _tag_version
+    user_id = get_current_user_id()
+    data = request.json or {}
+    tags = data.get('tags', [])
+    if not isinstance(tags, list):
+        return jsonify({"status": "error", "message": "tags must be a list of strings"}), 400
+    tags = [str(t).strip() for t in tags if str(t).strip()]
+    try:
+        _tag_version(version_id, user_id, tags)
+        return jsonify({"status": "success", "version_id": version_id, "tags": tags})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # --- JD analysis + application (new structured workflow) ---
 
 @app.route('/api/jd_analyze', methods=['POST'])
@@ -1363,6 +1391,8 @@ def jd_analyze():
             "session_id": session_id,
             "match_score": result['match_score'],
             "suggestions": result['suggestions'],
+            "base_version_id": result.get('base_version_id'),
+            "base_version_label": result.get('base_version_label'),
             "logs": logs,
         })
     except Exception as e:

@@ -37,6 +37,8 @@ from models import (
     mark_jd_applied,
     get_jd_session,
     list_jd_sessions,
+    list_resume_versions,
+    get_resume_version,
 )
 
 
@@ -93,24 +95,45 @@ def analyze(
     api_key: str,
     model: str | None = None,
 ) -> tuple[int, dict, list[dict]]:
-    """Analyze the user's current resume against a JD.
+    """Analyze the best matching saved resume version against a JD.
+
+    Automatically selects the saved version whose tags best match the JD.
+    Falls back to the current on-disk resume when no tagged version matches.
 
     Creates a jd_sessions row and populates it with the analysis.
 
     Returns:
-        (session_id, {match_score, suggestions}, logs)
+        (session_id, {match_score, suggestions, base_version_id, base_version_label}, logs)
     """
     logs = []
 
-    resume_yaml = get_current_resume(user_id)
+    # Pick the best saved version for this JD (tag-based matching)
+    best = find_best_version_for_jd(user_id, jd_text)
+    base_version_id = None
+    base_version_label = None
+
+    if best:
+        full = get_resume_version(best['id'], user_id)
+        resume_yaml = full['yaml_content'] if full else get_current_resume(user_id)
+        base_version_id = best['id']
+        base_version_label = best.get('label') or f"Version {best['id']}"
+        matched_count = best.get('_matched_tags', '?')
+        logs.append(
+            f"Using saved version '{base_version_label}' "
+            f"(id={base_version_id}, {matched_count} tag(s) matched JD)"
+        )
+    else:
+        resume_yaml = get_current_resume(user_id)
+        logs.append('Using current resume (no tagged versions matched this JD)')
+
     if not resume_yaml:
         raise ValueError('No resume found. Upload a resume before running JD analysis.')
 
-    # Create session record first (jd_text stored; raw lines are never stored)
+    # Create session record (jd_text stored; raw lines are never stored)
     session_id = create_jd_session(user_id, jd_text)
     logs.append(f'JD session created (id={session_id})')
 
-    # Call LLM
+    # Call LLM for ATS scoring + suggestions
     logs.append('Analyzing resume against JD...')
     user_msg = f"RESUME (YAML):\n{resume_yaml}\n\nJOB DESCRIPTION:\n{jd_text}"
     raw = call_llm(provider, api_key, _ANALYZE_SYSTEM, user_msg, model)
@@ -129,7 +152,12 @@ def analyze(
     # Persist analysis results
     update_jd_session(session_id, match_score, suggestions)
 
-    return session_id, {'match_score': match_score, 'suggestions': suggestions}, logs
+    return session_id, {
+        'match_score': match_score,
+        'suggestions': suggestions,
+        'base_version_id': base_version_id,
+        'base_version_label': base_version_label,
+    }, logs
 
 
 def apply_suggestions(
@@ -239,6 +267,51 @@ def get_session(session_id: int, user_id: int) -> dict | None:
 def list_sessions(user_id: int) -> list[dict]:
     """Return JD session history for a user (without full jd_text)."""
     return list_jd_sessions(user_id)
+
+
+# ---------------------------------------------------------------------------
+# Tag-based version matching
+# ---------------------------------------------------------------------------
+
+def _score_version_for_jd(tags: list, jd_text: str) -> float:
+    """Return fraction (0.0–1.0) of version tags found in jd_text (case-insensitive).
+
+    A tag matches if it appears as a word or phrase anywhere in the JD.
+    """
+    if not tags:
+        return 0.0
+    jd_lower = jd_text.lower()
+    matches = sum(1 for tag in tags if tag.lower() in jd_lower)
+    return matches / len(tags)
+
+
+def find_best_version_for_jd(user_id: int, jd_text: str) -> dict | None:
+    """Return the saved version whose tags best match jd_text, or None.
+
+    Only considers versions that have at least one tag set.
+    Returns None when no tagged version has any match (score == 0).
+
+    The returned dict is the version metadata row (no yaml_content) with an
+    extra key ``_matched_tags`` (int) for logging purposes.
+    """
+    versions = list_resume_versions(user_id)
+    best = None
+    best_score = 0.0
+
+    for v in versions:
+        tags_raw = v.get('tags')
+        if not tags_raw:
+            continue
+        tags = json.loads(tags_raw) if isinstance(tags_raw, str) else tags_raw
+        if not tags:
+            continue
+        score = _score_version_for_jd(tags, jd_text)
+        if score > best_score:
+            best_score = score
+            matched_count = sum(1 for t in tags if t.lower() in jd_text.lower())
+            best = dict(v, _matched_tags=matched_count)
+
+    return best if best_score > 0 else None
 
 
 # ---------------------------------------------------------------------------

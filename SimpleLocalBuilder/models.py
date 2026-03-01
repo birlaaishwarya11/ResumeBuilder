@@ -121,6 +121,7 @@ def init_db():
                 yaml_content TEXT NOT NULL,
                 source TEXT NOT NULL DEFAULT 'manual_edit',
                 label TEXT DEFAULT NULL,
+                tags TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL
             )
         ''')
@@ -145,6 +146,14 @@ def init_db():
             except Exception:
                 cur.execute("ROLLBACK TO SAVEPOINT add_col")
                 cur.execute("RELEASE SAVEPOINT add_col")
+        # Migration: add tags column to resume_versions
+        try:
+            cur.execute("SAVEPOINT add_rv_tags")
+            cur.execute("ALTER TABLE resume_versions ADD COLUMN tags TEXT DEFAULT NULL")
+            cur.execute("RELEASE SAVEPOINT add_rv_tags")
+        except Exception:
+            cur.execute("ROLLBACK TO SAVEPOINT add_rv_tags")
+            cur.execute("RELEASE SAVEPOINT add_rv_tags")
         # Reset verbose legacy section name defaults to simple ones
         cur.execute(
             "UPDATE user_settings SET section_names_json = %s WHERE section_names_json = %s",
@@ -185,6 +194,7 @@ def init_db():
                 yaml_content TEXT NOT NULL,
                 source TEXT NOT NULL DEFAULT 'manual_edit',
                 label TEXT DEFAULT NULL,
+                tags TEXT DEFAULT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
@@ -226,6 +236,10 @@ def init_db():
             conn.execute("SELECT mcp_api_key FROM users LIMIT 1")
         except sqlite3.OperationalError:
             conn.execute("ALTER TABLE users ADD COLUMN mcp_api_key TEXT DEFAULT NULL")
+        try:
+            conn.execute("SELECT tags FROM resume_versions LIMIT 1")
+        except sqlite3.OperationalError:
+            conn.execute("ALTER TABLE resume_versions ADD COLUMN tags TEXT DEFAULT NULL")
         # Reset verbose legacy section name defaults to simple ones
         conn.execute(
             "UPDATE user_settings SET section_names_json = ? WHERE section_names_json = ?",
@@ -623,26 +637,31 @@ def delete_parser(parser_id, user_id):
 RESUME_SOURCES = ('upload', 'manual_edit', 'jd_applied', 'ai_edit')
 
 
-def save_resume_version(user_id, yaml_content, source='manual_edit', label=None):
-    """Persist a resume snapshot. Returns the new version id."""
+def save_resume_version(user_id, yaml_content, source='manual_edit', label=None, tags=None):
+    """Persist a resume snapshot. Returns the new version id.
+
+    Args:
+        tags: Optional list of strings (e.g. ["python", "backend"]) stored as JSON.
+    """
     if source not in RESUME_SOURCES:
         source = 'manual_edit'
+    tags_json = json.dumps(tags) if tags else None
     now = datetime.now().isoformat()
     conn = get_db()
     if DB_BACKEND == 'postgres':
         cur = conn.cursor()
         cur.execute(
-            f'INSERT INTO resume_versions (user_id, yaml_content, source, label, created_at) '
-            f'VALUES ({PH},{PH},{PH},{PH},{PH}) RETURNING id',
-            (user_id, yaml_content, source, label, now)
+            f'INSERT INTO resume_versions (user_id, yaml_content, source, label, tags, created_at) '
+            f'VALUES ({PH},{PH},{PH},{PH},{PH},{PH}) RETURNING id',
+            (user_id, yaml_content, source, label, tags_json, now)
         )
         version_id = cur.fetchone()[0]
         cur.close()
     else:
         cursor = conn.execute(
-            f'INSERT INTO resume_versions (user_id, yaml_content, source, label, created_at) '
-            f'VALUES ({PH},{PH},{PH},{PH},{PH})',
-            (user_id, yaml_content, source, label, now)
+            f'INSERT INTO resume_versions (user_id, yaml_content, source, label, tags, created_at) '
+            f'VALUES ({PH},{PH},{PH},{PH},{PH},{PH})',
+            (user_id, yaml_content, source, label, tags_json, now)
         )
         version_id = cursor.lastrowid
     conn.commit()
@@ -651,12 +670,14 @@ def save_resume_version(user_id, yaml_content, source='manual_edit', label=None)
 
 
 def list_resume_versions(user_id):
-    """Return all versions for a user (without yaml_content) newest first."""
+    """Return all versions for a user (without yaml_content) newest first.
+    Includes the tags field (JSON string or None).
+    """
     conn = get_db()
     if DB_BACKEND == 'postgres':
         cur = conn.cursor(cursor_factory=__import__('psycopg2').extras.RealDictCursor)
         cur.execute(
-            f'SELECT id, user_id, source, label, created_at FROM resume_versions '
+            f'SELECT id, user_id, source, label, tags, created_at FROM resume_versions '
             f'WHERE user_id = {PH} ORDER BY created_at DESC',
             (user_id,)
         )
@@ -664,13 +685,37 @@ def list_resume_versions(user_id):
         cur.close()
     else:
         rows = conn.execute(
-            f'SELECT id, user_id, source, label, created_at FROM resume_versions '
+            f'SELECT id, user_id, source, label, tags, created_at FROM resume_versions '
             f'WHERE user_id = {PH} ORDER BY created_at DESC',
             (user_id,)
         ).fetchall()
         rows = [dict(r) for r in rows]
     conn.close()
     return rows
+
+
+def update_version_tags(version_id, user_id, tags):
+    """Update the tags on an existing resume version. user_id is a security guard.
+
+    Args:
+        tags: list of strings to store (replaces existing tags).
+    """
+    tags_json = json.dumps(tags) if tags else None
+    conn = get_db()
+    if DB_BACKEND == 'postgres':
+        cur = conn.cursor()
+        cur.execute(
+            f'UPDATE resume_versions SET tags = {PH} WHERE id = {PH} AND user_id = {PH}',
+            (tags_json, version_id, user_id)
+        )
+        cur.close()
+    else:
+        conn.execute(
+            f'UPDATE resume_versions SET tags = {PH} WHERE id = {PH} AND user_id = {PH}',
+            (tags_json, version_id, user_id)
+        )
+    conn.commit()
+    conn.close()
 
 
 def get_resume_version(version_id, user_id):

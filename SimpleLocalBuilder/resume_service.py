@@ -24,6 +24,7 @@ from models import (
     list_resume_versions,
     get_resume_version,
     get_latest_resume_version,
+    update_version_tags,
     DATA_DIR,
 )
 
@@ -45,7 +46,13 @@ def get_current_resume(user_id: int) -> str | None:
         return f.read()
 
 
-def save_current_resume(user_id: int, yaml_content: str, source: str = 'manual_edit', label: str | None = None) -> int:
+def save_current_resume(
+    user_id: int,
+    yaml_content: str,
+    source: str = 'manual_edit',
+    label: str | None = None,
+    tags: list | None = None,
+) -> int:
     """Write the canonical resume file and snapshot it in the DB.
 
     Args:
@@ -53,6 +60,8 @@ def save_current_resume(user_id: int, yaml_content: str, source: str = 'manual_e
         yaml_content: Raw YAML string. Validated before writing.
         source:       One of 'upload' | 'manual_edit' | 'jd_applied' | 'ai_edit'.
         label:        Optional human-readable label for the version.
+        tags:         Optional list of keyword strings (e.g. ["python", "backend"]) used
+                      by the JD-matching feature to select the best version for a given JD.
 
     Returns:
         The new resume_versions.id (version id).
@@ -69,7 +78,16 @@ def save_current_resume(user_id: int, yaml_content: str, source: str = 'manual_e
     with open(path, 'w', encoding='utf-8') as f:
         f.write(yaml_content)
 
-    return save_resume_version(user_id, yaml_content, source=source, label=label)
+    return save_resume_version(user_id, yaml_content, source=source, label=label, tags=tags)
+
+
+def tag_version(version_id: int, user_id: int, tags: list) -> None:
+    """Update tags on an existing resume version (replaces previous tags).
+
+    Args:
+        tags: list of keyword strings, e.g. ["python", "ml", "backend"].
+    """
+    update_version_tags(version_id, user_id, tags)
 
 
 # ---------------------------------------------------------------------------
